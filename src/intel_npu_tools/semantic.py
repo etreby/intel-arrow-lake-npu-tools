@@ -1,12 +1,15 @@
 """Private local semantic indexing backed by OpenVINO's NPU embedding pipeline."""
 
 import argparse
+import contextlib
+import errno
 import hashlib
 import json
+import os
 import sqlite3
 import threading
 from pathlib import Path
-from typing import Callable, Iterable
+from typing import Callable, Iterable, Iterator
 
 import numpy as np
 
@@ -19,12 +22,44 @@ TEXT_SUFFIXES = {
     ".py", ".rb", ".rs", ".rst", ".sh", ".sql", ".toml", ".ts", ".tsx",
     ".txt", ".xml", ".yaml", ".yml",
 }
+# Matched only against directories below the indexed root, never against its
+# ancestors.
 SKIP_DIRS = {
     ".git", ".hg", ".svn", ".venv", "venv", "node_modules", "__pycache__",
-    "dist", "build", "models",
+    "dist", "build", ".cache", ".ipynb_checkpoints", ".mypy_cache",
+    ".pytest_cache", ".ruff_cache",
 }
+# A directory holding any of these is a model directory, so it is pruned whole.
+# Keying on the weights rather than on the directory's name keeps a source
+# directory named "models" indexable while skipping the text sidecars that ship
+# beside real weights -- tokenizer vocabularies and OpenVINO IR graphs, which
+# are .json/.txt/.xml and so pass TEXT_SUFFIXES on their own.
+WEIGHT_SUFFIXES = {".bin", ".gguf", ".onnx", ".pt", ".pth", ".safetensors"}
 MAX_FILE_BYTES = 2 * 1024 * 1024
+# The pipeline truncates at 512 tokens, so chunks are kept short enough that
+# their tail still reaches the model. See docs/SEMANTIC_SEARCH.md.
+TARGET_CHUNK_CHARS = 1200
+MAX_CHUNK_CHARS = 1500
 QUERY_INSTRUCTION = "Given a search query, retrieve relevant passages from the user's local files"
+# Recorded per file. Bump when chunking changes: each file is then re-chunked
+# the next time its root is indexed, so a file's passages never mix chunkers.
+# Files belonging to roots that are not re-indexed keep working untouched.
+CHUNKER_VERSION = "2"
+LEGACY_CHUNKER_VERSION = "1"
+
+SCHEMA = """
+CREATE TABLE IF NOT EXISTS files (
+    path TEXT PRIMARY KEY, root TEXT NOT NULL, mtime_ns INTEGER NOT NULL,
+    size INTEGER NOT NULL, digest TEXT NOT NULL,
+    chunker TEXT NOT NULL DEFAULT '1', device INTEGER
+);
+CREATE TABLE IF NOT EXISTS chunks (
+    id INTEGER PRIMARY KEY, path TEXT NOT NULL, start_line INTEGER NOT NULL,
+    end_line INTEGER NOT NULL, content TEXT NOT NULL, vector BLOB NOT NULL,
+    dimensions INTEGER NOT NULL, FOREIGN KEY(path) REFERENCES files(path) ON DELETE CASCADE
+);
+CREATE INDEX IF NOT EXISTS chunks_path ON chunks(path);
+"""
 
 _pipeline = None
 _pipeline_lock = threading.RLock()
@@ -55,7 +90,47 @@ def embedding_pipeline():
     return _pipeline
 
 
-def chunk_text(text: str, target_chars: int = 1600, overlap_lines: int = 2) -> list[tuple[int, int, str]]:
+def _split_lines(lines: list[str], first_line: int, max_chars: int) -> list[tuple[int, int, str]]:
+    """Emit pieces of at most max_chars, each labelled with the lines it covers.
+
+    A line longer than max_chars has no boundary to break on, so it is split
+    across several pieces that all cite that one line rather than the whole
+    surrounding range.
+    """
+    pieces: list[tuple[int, int, str]] = []
+    buffer: list[str] = []
+    buffer_start = first_line
+    length = 0
+
+    def flush(last_line: int) -> None:
+        nonlocal buffer, length
+        if buffer:
+            pieces.append((buffer_start, last_line, "\n".join(buffer)))
+            buffer, length = [], 0
+
+    for offset, line in enumerate(lines):
+        number = first_line + offset
+        if len(line) > max_chars:
+            flush(number - 1)
+            for cut in range(0, len(line), max_chars):
+                pieces.append((number, number, line[cut:cut + max_chars]))
+            buffer_start = number + 1
+            continue
+        if buffer and length + len(line) + 1 > max_chars:
+            flush(number - 1)
+            buffer_start = number
+        buffer.append(line)
+        length += len(line) + 1
+    flush(first_line + len(lines) - 1)
+    return [(start, end, content) for start, end, content in pieces if content.strip()]
+
+
+def chunk_text(
+    text: str,
+    target_chars: int = TARGET_CHUNK_CHARS,
+    overlap_lines: int = 2,
+    max_chars: int = MAX_CHUNK_CHARS,
+) -> list[tuple[int, int, str]]:
     """Split text on line boundaries and return (start_line, end_line, content)."""
     lines = text.splitlines()
     chunks = []
@@ -66,50 +141,121 @@ def chunk_text(text: str, target_chars: int = 1600, overlap_lines: int = 2) -> l
         while end < len(lines) and (size < target_chars or end == start):
             size += len(lines[end]) + 1
             end += 1
-        content = "\n".join(lines[start:end]).strip()
-        if content:
-            chunks.append((start + 1, end, content))
+        chunks.extend(_split_lines(lines[start:end], start + 1, max_chars))
         if end >= len(lines):
             break
         start = max(start + 1, end - overlap_lines)
     return chunks
 
 
-def iter_text_files(root: Path) -> Iterable[Path]:
-    if root.is_file():
-        candidates = [root]
+def _is_indexable(path: Path) -> bool:
+    try:
+        return (
+            path.is_file()
+            and not path.is_symlink()
+            and path.suffix.lower() in TEXT_SUFFIXES
+            and path.stat().st_size <= MAX_FILE_BYTES
+        )
+    except OSError:
+        return False
+
+
+def _is_definitely_gone(path: str, device: int | None) -> bool:
+    """True only when the file is missing from a filesystem that is still attached.
+
+    os.path.exists() answers False in three different situations: the file was
+    deleted, a parent directory lost its execute bit, and the filesystem holding
+    it was unmounted. Only the first justifies dropping index rows.
+
+    A permission error is ruled out by the errno: ENOENT and ENOTDIR are the only
+    codes meaning the name is really absent. An offline mount also reports ENOENT,
+    though, so the device recorded at index time is compared against the nearest
+    existing ancestor: an unmounted tree leaves the mountpoint's own filesystem
+    behind, and the mismatch keeps the rows. Rows recorded before 0.2.1 carry no
+    device and fall back to the errno alone until the next run records one.
+    """
+    try:
+        os.lstat(path)
+    except OSError as error:
+        if error.errno not in (errno.ENOENT, errno.ENOTDIR):
+            return False
     else:
-        candidates = root.rglob("*")
-    for path in candidates:
-        if any(part in SKIP_DIRS or part.endswith(".egg-info") for part in path.parts):
-            continue
+        return False
+    if device is None:
+        return True
+    return _living_device(Path(path).parent) == device
+
+
+def _living_device(directory: Path) -> int | None:
+    """Device of the nearest ancestor that still exists, or None if unknowable."""
+    for candidate in [directory, *directory.parents]:
         try:
-            if path.is_file() and not path.is_symlink() and path.suffix.lower() in TEXT_SUFFIXES and path.stat().st_size <= MAX_FILE_BYTES:
-                yield path.resolve()
-        except OSError:
+            return os.stat(candidate).st_dev
+        except OSError as error:
+            if error.errno in (errno.ENOENT, errno.ENOTDIR):
+                continue
+            return None
+    return None
+
+
+def iter_text_files(root: Path) -> Iterable[Path]:
+    """Yield indexable files below root. SKIP_DIRS applies to root's descendants only."""
+    if root.is_file():
+        if _is_indexable(root):
+            yield root.resolve()
+        return
+    for directory, subdirectories, filenames in os.walk(root, followlinks=False):
+        if any(Path(name).suffix.lower() in WEIGHT_SUFFIXES for name in filenames):
+            subdirectories[:] = []
             continue
+        subdirectories[:] = sorted(
+            name for name in subdirectories
+            if name not in SKIP_DIRS and not name.endswith(".egg-info")
+        )
+        for name in sorted(filenames):
+            path = Path(directory) / name
+            if _is_indexable(path):
+                yield path.resolve()
 
 
-def _connect(db_path: Path) -> sqlite3.Connection:
+def _like_prefix(resolved: str) -> str:
+    """Escape LIKE wildcards so a literal '_' or '%' in a path cannot match siblings."""
+    escaped = resolved.rstrip("/").replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+    return escaped + "/%"
+
+
+def _root_predicate(resolved: str) -> tuple[str, list[str]]:
+    return "(path = ? OR path LIKE ? ESCAPE '\\')", [resolved, _like_prefix(resolved)]
+
+
+def _migrate(connection: sqlite3.Connection) -> None:
+    """Add the per-file chunker and device columns to databases written before 0.2.1."""
+    columns = {row[1] for row in connection.execute("PRAGMA table_info(files)")}
+    if not columns:
+        return
+    if "chunker" not in columns:
+        connection.execute(
+            f"ALTER TABLE files ADD COLUMN chunker TEXT NOT NULL DEFAULT '{LEGACY_CHUNKER_VERSION}'"
+        )
+    if "device" not in columns:
+        # Legacy rows carry no device, so they fall back to the plain
+        # existence check until the next index run records one.
+        connection.execute("ALTER TABLE files ADD COLUMN device INTEGER")
+
+
+@contextlib.contextmanager
+def _connect(db_path: Path) -> Iterator[sqlite3.Connection]:
     db_path.parent.mkdir(parents=True, exist_ok=True)
     connection = sqlite3.connect(db_path)
-    connection.execute("PRAGMA journal_mode=WAL")
-    connection.executescript(
-        """
-        CREATE TABLE IF NOT EXISTS files (
-            path TEXT PRIMARY KEY, root TEXT NOT NULL, mtime_ns INTEGER NOT NULL,
-            size INTEGER NOT NULL, digest TEXT NOT NULL
-        );
-        CREATE TABLE IF NOT EXISTS chunks (
-            id INTEGER PRIMARY KEY, path TEXT NOT NULL, start_line INTEGER NOT NULL,
-            end_line INTEGER NOT NULL, content TEXT NOT NULL, vector BLOB NOT NULL,
-            dimensions INTEGER NOT NULL, FOREIGN KEY(path) REFERENCES files(path) ON DELETE CASCADE
-        );
-        CREATE INDEX IF NOT EXISTS chunks_path ON chunks(path);
-        """
-    )
-    connection.execute("PRAGMA foreign_keys=ON")
-    return connection
+    try:
+        connection.execute("PRAGMA journal_mode=WAL")
+        connection.execute("PRAGMA foreign_keys=ON")
+        connection.executescript(SCHEMA)
+        _migrate(connection)
+        with connection:
+            yield connection
+    finally:
+        connection.close()
 
 
 class SemanticIndex:
@@ -117,19 +263,64 @@ class SemanticIndex:
         self.db_path = Path(db_path)
         self.pipeline_factory = pipeline_factory
 
+    def _prune_removed(self, db: sqlite3.Connection, root: Path, present: set[str]) -> int:
+        """Drop rows for files under this root that no longer exist on disk.
+
+        A row is removed only when its file is genuinely gone, never merely
+        because this traversal skipped it. That keeps files inside excluded
+        directories and separately indexed nested roots intact, and it does not
+        depend on which root last recorded a file: overlapping roots can be
+        indexed in any order and deletions are still noticed. Nor does it depend
+        on the filesystem being reachable: see _is_definitely_gone.
+        """
+        predicate, params = _root_predicate(str(root))
+        stale = [
+            row[0]
+            for row in db.execute(f"SELECT path, device FROM files WHERE {predicate}", params)
+            if row[0] not in present and _is_definitely_gone(row[0], row[1])
+        ]
+        db.executemany("DELETE FROM chunks WHERE path=?", [(path,) for path in stale])
+        db.executemany("DELETE FROM files WHERE path=?", [(path,) for path in stale])
+        return len(stale)
+
+    def _forget(self, root: Path) -> dict:
+        """Drop everything indexed under a root that has since been deleted.
+
+        Re-indexing the path is the only handle a user has on it, so this must
+        clean up rather than refuse; otherwise a deleted file or directory stays
+        searchable forever.
+        """
+        with _connect(self.db_path) as db:
+            removed = self._prune_removed(db, root, set())
+        if not removed:
+            raise ValueError(f"Path does not exist: {root}")
+        return {
+            "root": str(root), "files_seen": 0, "files_updated": 0, "files_unchanged": 0,
+            "files_removed": removed, "files_rechunked": 0, "chunks_added": 0, "device": "NPU",
+            "removed_root": (
+                f"{root} no longer exists; its {removed} indexed file(s) were removed "
+                "from the index."
+            ),
+        }
+
     def index(self, value: str) -> dict:
         root = Path(value).expanduser().resolve()
         if not root.exists():
-            raise ValueError(f"Path does not exist: {root}")
+            return self._forget(root)
         files = list(iter_text_files(root))
-        updated = skipped = chunks_added = 0
+        updated = skipped = rechunked = chunks_added = 0
         with _connect(self.db_path) as db:
             for path in files:
                 stat = path.stat()
-                row = db.execute("SELECT mtime_ns, size FROM files WHERE path=?", (str(path),)).fetchone()
-                if row == (stat.st_mtime_ns, stat.st_size):
-                    skipped += 1
-                    continue
+                row = db.execute(
+                    "SELECT mtime_ns, size, chunker FROM files WHERE path=?", (str(path),)
+                ).fetchone()
+                if row and (row[0], row[1]) == (stat.st_mtime_ns, stat.st_size):
+                    if row[2] == CHUNKER_VERSION:
+                        skipped += 1
+                        continue
+                    # Unchanged on disk, but chunked by an older release.
+                    rechunked += 1
                 try:
                     text = path.read_text(encoding="utf-8", errors="replace")
                 except OSError:
@@ -145,8 +336,12 @@ class SemanticIndex:
                 digest = hashlib.sha256(text.encode("utf-8", errors="replace")).hexdigest()
                 db.execute("DELETE FROM chunks WHERE path=?", (str(path),))
                 db.execute(
-                    "INSERT OR REPLACE INTO files(path,root,mtime_ns,size,digest) VALUES(?,?,?,?,?)",
-                    (str(path), str(root), stat.st_mtime_ns, stat.st_size, digest),
+                    "INSERT OR REPLACE INTO files(path,root,mtime_ns,size,digest,chunker,device)"
+                    " VALUES(?,?,?,?,?,?,?)",
+                    (
+                        str(path), str(root), stat.st_mtime_ns, stat.st_size, digest,
+                        CHUNKER_VERSION, stat.st_dev,
+                    ),
                 )
                 db.executemany(
                     "INSERT INTO chunks(path,start_line,end_line,content,vector,dimensions) VALUES(?,?,?,?,?,?)",
@@ -157,10 +352,26 @@ class SemanticIndex:
                 )
                 updated += 1
                 chunks_added += len(pieces)
-        return {
+            removed = self._prune_removed(db, root, {str(path) for path in files})
+        result = {
             "root": str(root), "files_seen": len(files), "files_updated": updated,
-            "files_unchanged": skipped, "chunks_added": chunks_added, "device": "NPU",
+            "files_unchanged": skipped, "files_removed": removed,
+            "files_rechunked": rechunked, "chunks_added": chunks_added, "device": "NPU",
         }
+        if rechunked:
+            result["rebuilt"] = (
+                f"Chunking changed in this release, so {rechunked} unmodified file(s) under this "
+                "root were re-embedded. Other indexed roots are untouched until you index them."
+            )
+        if not files:
+            result["warning"] = (
+                f"No indexable files found under {root}. Supported suffixes are "
+                f"{', '.join(sorted(TEXT_SUFFIXES))}; directories named "
+                f"{', '.join(sorted(SKIP_DIRS))}, directories holding model weights "
+                f"({', '.join(sorted(WEIGHT_SUFFIXES))}), and files over "
+                f"{MAX_FILE_BYTES // (1024 * 1024)} MiB are skipped."
+            )
+        return result
 
     def search(self, query: str, limit: int = 5, root: str | None = None) -> list[dict]:
         query = query.strip()
@@ -169,11 +380,10 @@ class SemanticIndex:
         limit = max(1, min(int(limit), 20))
         vector = np.asarray(self.pipeline_factory().embed_query(query), dtype=np.float32)
         sql = "SELECT path,start_line,end_line,content,vector,dimensions FROM chunks"
-        params = []
+        params: list[str] = []
         if root:
-            resolved = str(Path(root).expanduser().resolve())
-            sql += " WHERE path=? OR path LIKE ?"
-            params.extend((resolved, resolved.rstrip("/") + "/%"))
+            predicate, params = _root_predicate(str(Path(root).expanduser().resolve()))
+            sql += f" WHERE {predicate}"
         results = []
         with _connect(self.db_path) as db:
             for path, start, end, content, blob, dimensions in db.execute(sql, params):

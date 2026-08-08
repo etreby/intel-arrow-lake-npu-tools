@@ -88,10 +88,7 @@ class SpeechApp:
             message = str(exc)
             self.later(lambda: (messagebox.showerror("Transcription failed", message), self.button.configure(state="normal")))
         finally:
-            try:
-                os.unlink(self.audio_path)
-            except OSError:
-                pass
+            self.discard_recording()
 
     def copy(self):
         subprocess.run(["wl-copy", "--", self.text.get("1.0", "end").strip()])
@@ -99,7 +96,19 @@ class SpeechApp:
     def close(self):
         if self.recorder:
             os.killpg(self.recorder.pid, signal.SIGTERM)
+            self.recorder = None
+        self.discard_recording()
         self.root.destroy()
+
+    def discard_recording(self):
+        """Remove the temporary recording so closing mid-capture leaves nothing behind."""
+        if not self.audio_path:
+            return
+        try:
+            os.unlink(self.audio_path)
+        except OSError:
+            pass
+        self.audio_path = None
 
 
 def main():

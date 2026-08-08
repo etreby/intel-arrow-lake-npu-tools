@@ -36,7 +36,7 @@ intel-npu-search index /absolute/path/to/documents
 intel-npu-search search "specific natural-language question" --limit 10
 ```
 
-Check that files use supported extensions, are below 2 MiB, and are outside excluded directories. Use `--root` only when that root was indexed.
+Check that files use supported extensions, are below 2 MiB, and are outside excluded directories. When nothing was eligible, `index` reports a `warning` field explaining which filters applied. Use `--root` only when that root was indexed.
 
 ## Enable deeper OpenVINO logging
 

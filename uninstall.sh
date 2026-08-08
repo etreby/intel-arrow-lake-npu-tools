@@ -2,6 +2,20 @@
 set -euo pipefail
 
 DATA_DIR="${INTEL_NPU_TOOLS_HOME:-$HOME/.local/share/intel-arrow-lake-npu-tools}"
+
+# INTEL_NPU_TOOLS_HOME reaches "rm -rf" below. Canonicalize before checking
+# containment so that "..", or a symlinked component such as $HOME/data -> /etc,
+# cannot pass a lexical prefix test and then delete outside the home directory.
+CANONICAL_HOME=$(realpath -m -- "$HOME")
+DATA_DIR=$(realpath -m -- "$DATA_DIR")
+case "$DATA_DIR" in
+  "$CANONICAL_HOME"/?*) ;;
+  *)
+    echo "Refusing to remove '$DATA_DIR': INTEL_NPU_TOOLS_HOME must resolve to a subdirectory of $CANONICAL_HOME." >&2
+    exit 2
+    ;;
+esac
+
 echo "This removes the user applications, model cache, and MCP entries. System NPU drivers are preserved."
 read -r -p "Continue? [y/N] " answer
 [[ "$answer" =~ ^[Yy]$ ]] || exit 0

@@ -2,7 +2,6 @@ import subprocess
 import tempfile
 from pathlib import Path
 
-import openvino as ov
 from mcp.server import MCPServer
 
 from .audio import transcribe_file
@@ -32,6 +31,8 @@ def local_file(value: str, suffixes: tuple[str, ...]) -> Path:
 @mcp.tool()
 def npu_status() -> dict:
     """Report OpenVINO devices and whether Intel AI Boost is available."""
+    import openvino as ov
+
     core = ov.Core()
     devices = {device: core.get_property(device, "FULL_DEVICE_NAME") for device in core.available_devices}
     return {"npu_available": "NPU" in devices, "devices": devices, "whisper_model": str(WHISPER_MODEL)}

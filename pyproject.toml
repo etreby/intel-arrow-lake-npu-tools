@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "intel-arrow-lake-npu-tools"
-version = "0.2.0"
+version = "0.2.1"
 description = "Local OpenVINO speech, OCR, semantic search, and MCP tools for Intel Arrow Lake NPUs on Linux"
 readme = "README.md"
 requires-python = ">=3.10"
@@ -22,9 +22,12 @@ dependencies = [
   "mcp>=2,<3",
   "numpy>=1.26,<2.5",
   "opencv-python-headless>=4.10",
-  "openvino==2026.2.1",
-  "openvino-genai==2026.2.1",
-  "openvino-tokenizers==2026.2.1.0",
+  # 2026.2.x is the NPU-validated baseline. Patch releases are accepted so the
+  # toolkit is not pinned to a single build, but a new minor must be validated
+  # on real NPU hardware before the bound moves.
+  "openvino~=2026.2.1",
+  "openvino-genai~=2026.2.1",
+  "openvino-tokenizers~=2026.2.1",
   "pillow>=10",
 ]
 

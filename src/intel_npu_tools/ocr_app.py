@@ -33,7 +33,7 @@ def main():
             return
         try:
             result = extract_text(Path(image.name))
-            subprocess.run(["wl-copy", "--", result["text"],], check=True)
+            subprocess.run(["wl-copy", "--", result["text"]], check=True)
             result_window(result)
         except Exception as exc:
             root = tk.Tk()

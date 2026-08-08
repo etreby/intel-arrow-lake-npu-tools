@@ -199,8 +199,8 @@ Any MCP client can use this stdio configuration:
 
 ```text
 Microphone/audio ──> Whisper Base INT8 ──> OpenVINO GenAI ──> Intel NPU
-Screenshot/image ──> text detector + recognizer ──> OpenVINO ──> Intel NPU
-                                      └──> Tesseract layout/language fallback
+Screenshot/image ──┬─> text detector + recognizer ──> OpenVINO ──> Intel NPU
+                   └─> Tesseract (preferred for layout, punctuation, Arabic)
 Local text ──> chunks ──> Qwen3 Embedding INT8 ──> Intel NPU ──> SQLite vectors
 AI agent ──> local stdio MCP server ──> the same NPU pipelines
 ```
@@ -256,7 +256,9 @@ pw-record --rate 16000 --channels 1 /tmp/microphone-test.wav
 
 ### OCR limitations
 
-Intel's compact recognition model focuses on lowercase Latin letters and digits. Tesseract supplements it for punctuation, layout, English, and Arabic. Stylized fonts and very small text may remain imperfect.
+Both engines run on every image. The NPU detects text regions and recognizes them with Intel's compact model, which covers only lowercase Latin letters and digits. Tesseract reads punctuation, layout, English, and Arabic, so its output is used as the returned text whenever it produces any; the NPU result is returned when Tesseract is missing, fails, or finds nothing. `npu_regions` and `npu_text` are always reported separately so you can see what the NPU contributed. Stylized fonts and very small text may remain imperfect.
+
+`install.sh` installs Tesseract. Without it, OCR still works but falls back to the NPU-only text.
 
 For NPU compilation, semantic-search, and MCP diagnostics, use the complete [debugging guide](docs/TROUBLESHOOTING.md).
 

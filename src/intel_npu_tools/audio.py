@@ -3,7 +3,6 @@ import threading
 from pathlib import Path
 
 import numpy as np
-import openvino_genai as ov_genai
 
 from .paths import WHISPER_MODEL
 
@@ -29,6 +28,8 @@ def pipeline():
     global _pipeline
     with _lock:
         if _pipeline is None:
+            import openvino_genai as ov_genai
+
             if not WHISPER_MODEL.exists():
                 raise FileNotFoundError(f"Whisper model not found at {WHISPER_MODEL}; run scripts/download-models.py")
             _pipeline = ov_genai.WhisperPipeline(str(WHISPER_MODEL), "NPU")
