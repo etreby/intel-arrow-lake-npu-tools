@@ -1,6 +1,10 @@
 # Intel Arrow Lake NPU Tools for Linux
 
-An unofficial, community-maintained toolkit that makes the integrated **Intel AI Boost NPU** in Arrow Lake processors useful on Linux. It provides private local speech transcription, screenshot OCR, hardware verification, and MCP tools that AI agents can call.
+An unofficial, community-maintained toolkit that makes the integrated **Intel AI Boost NPU** in Arrow Lake processors useful on Linux. It provides private semantic search, local speech transcription, screenshot OCR, hardware verification, and ten MCP tools that AI agents can call.
+
+[![Validate](https://github.com/etreby/intel-arrow-lake-npu-tools/actions/workflows/validate.yml/badge.svg)](https://github.com/etreby/intel-arrow-lake-npu-tools/actions/workflows/validate.yml)
+[![Release](https://img.shields.io/github/v/release/etreby/intel-arrow-lake-npu-tools)](https://github.com/etreby/intel-arrow-lake-npu-tools/releases)
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 
 > This project is not affiliated with, sponsored by, or endorsed by Intel Corporation. Intel, Intel Core, OpenVINO, and Intel AI Boost are trademarks of their respective owners.
 
@@ -14,7 +18,8 @@ The NPU is a good fit for efficient background inference. It does **not** replac
 
 - **Speech to text:** multilingual Whisper Base INT8 runs locally on the NPU.
 - **Screenshot OCR:** select a region and copy recognized English or Arabic text.
-- **MCP server:** Codex, Claude, Gemini CLI, AGY/Antigravity CLI, Hermes, Antigravity IDE, OpenCode, and other MCP clients can transcribe audio, record the microphone, OCR images, or read the current monitor.
+- **Private semantic search:** index local documents, logs, and source code with Qwen3-Embedding 0.6B INT8, then retrieve passages by meaning.
+- **MCP server:** Codex, Claude, Gemini CLI, AGY/Antigravity CLI, Hermes, Antigravity IDE, OpenCode, and other MCP clients can use all ten tools.
 - **Hardware diagnostics:** report every OpenVINO device and confirm `Intel(R) AI Boost` is available.
 - **Reversible installation:** user applications and models are isolated under `~/.local`; the uninstaller deliberately preserves system drivers.
 
@@ -64,6 +69,18 @@ To skip automatic MCP client registration:
 ./install.sh --without-mcp
 ```
 
+The model download is approximately 800 MB in total, including Whisper, OCR, and the roughly 600 MB embedding model.
+
+## Semantic search in 30 seconds
+
+```bash
+intel-npu-search index ~/Projects/my-project
+intel-npu-search search "Where is authentication configured?"
+intel-npu-search status
+```
+
+Indexing is incremental and remains local. See the [semantic-search guide](docs/SEMANTIC_SEARCH.md) for supported files, performance, privacy boundaries, and customization.
+
 ## Desktop usage
 
 Launch these applications from the desktop menu:
@@ -95,6 +112,9 @@ It exposes:
 | `record_and_transcribe` | Record the default microphone for a bounded duration |
 | `ocr_image` | Extract English/Arabic text from an image |
 | `ocr_current_monitor` | Capture and OCR the current monitor |
+| `semantic_index` | Incrementally index a text file or directory on the NPU |
+| `semantic_search` | Retrieve ranked local passages by meaning |
+| `semantic_index_status` | Show indexed roots, files, chunks, and database path |
 | `open_speech_app` | Open the interactive speech application |
 | `open_ocr_selector` | Open interactive region OCR |
 
@@ -105,6 +125,8 @@ Use intel-npu-tools to transcribe ~/recording.m4a.
 Use the NPU to OCR ~/Pictures/error.png.
 Record my microphone for 15 seconds and transcribe it.
 Read the text currently visible on my monitor.
+Index ~/Projects/my-project, then find where authentication is configured.
+Search my indexed documents for the Windows boot recovery procedure.
 ```
 
 Manual Codex registration:
@@ -179,6 +201,7 @@ Any MCP client can use this stdio configuration:
 Microphone/audio ──> Whisper Base INT8 ──> OpenVINO GenAI ──> Intel NPU
 Screenshot/image ──> text detector + recognizer ──> OpenVINO ──> Intel NPU
                                       └──> Tesseract layout/language fallback
+Local text ──> chunks ──> Qwen3 Embedding INT8 ──> Intel NPU ──> SQLite vectors
 AI agent ──> local stdio MCP server ──> the same NPU pipelines
 ```
 
@@ -188,9 +211,18 @@ All inference targets `NPU` explicitly. The included tools do not silently redir
 
 - No network server is started.
 - MCP communication uses a local child process over stdin/stdout.
-- Audio and screenshots are processed locally.
+- Audio, screenshots, indexed text, and embeddings are processed and stored locally.
 - Network access is needed only during installation to download software and models.
 - Temporary recordings and screenshots are deleted after processing.
+
+## Documentation
+
+- [Semantic search, customization, and measured performance](docs/SEMANTIC_SEARCH.md)
+- [Troubleshooting and debugging](docs/TROUBLESHOOTING.md)
+- [Building agent skills](docs/BUILDING_SKILLS.md)
+- [Ready-to-copy local-knowledge skill](examples/skills/intel-npu-local-knowledge/SKILL.md)
+- [Contributing](CONTRIBUTING.md)
+- [Changelog](CHANGELOG.md)
 
 ## Troubleshooting
 
@@ -226,6 +258,8 @@ pw-record --rate 16000 --channels 1 /tmp/microphone-test.wav
 
 Intel's compact recognition model focuses on lowercase Latin letters and digits. Tesseract supplements it for punctuation, layout, English, and Arabic. Stylized fonts and very small text may remain imperfect.
 
+For NPU compilation, semantic-search, and MCP diagnostics, use the complete [debugging guide](docs/TROUBLESHOOTING.md).
+
 ## Development
 
 ```bash
@@ -252,6 +286,7 @@ The uninstaller removes user applications, models, and MCP registrations. It int
 - [OpenVINO GenAI on NPU](https://docs.openvino.ai/2026/openvino-workflow-generative/inference-with-genai/inference-with-genai-on-npu.html)
 - [Official MCP Python SDK](https://github.com/modelcontextprotocol/python-sdk)
 - [OpenVINO Whisper Base INT8](https://huggingface.co/OpenVINO/whisper-base-int8-ov)
+- [OpenVINO Qwen3 Embedding 0.6B INT8](https://huggingface.co/OpenVINO/Qwen3-Embedding-0.6B-int8-ov)
 - [Open Model Zoo OCR tutorial](https://docs.openvino.ai/2024/notebooks/optical-character-recognition-with-output.html)
 
 ## License

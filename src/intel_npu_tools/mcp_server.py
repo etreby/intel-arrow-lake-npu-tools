@@ -8,13 +8,16 @@ from mcp.server import MCPServer
 from .audio import transcribe_file
 from .ocr import extract_text
 from .paths import WHISPER_MODEL
+from .semantic import SemanticIndex
 
 
 mcp = MCPServer(
     "intel-arrow-lake-npu-tools",
     title="Intel Arrow Lake NPU Tools",
-    description="Private local speech transcription and OCR using Intel AI Boost.",
+    description="Private local speech, OCR, and semantic search using Intel AI Boost.",
 )
+
+semantic = SemanticIndex()
 
 
 def local_file(value: str, suffixes: tuple[str, ...]) -> Path:
@@ -62,6 +65,24 @@ def ocr_current_monitor() -> dict:
     with tempfile.NamedTemporaryFile(suffix=".png") as image:
         subprocess.run(["spectacle", "--current", "--background", "--nonotify", "--output", image.name], check=True, timeout=30)
         return extract_text(Path(image.name))
+
+
+@mcp.tool()
+def semantic_index(path: str) -> dict:
+    """Index a local text file or directory for private semantic search on the Intel NPU."""
+    return semantic.index(path)
+
+
+@mcp.tool()
+def semantic_search(query: str, limit: int = 5, root: str | None = None) -> list[dict]:
+    """Search indexed local files by meaning using Intel NPU embeddings."""
+    return semantic.search(query, limit, root)
+
+
+@mcp.tool()
+def semantic_index_status() -> dict:
+    """Report the local semantic index database, roots, file count, and chunk count."""
+    return semantic.status()
 
 
 @mcp.tool()

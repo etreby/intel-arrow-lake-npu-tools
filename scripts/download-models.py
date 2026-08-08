@@ -18,6 +18,12 @@ snapshot_download(
     local_dir=models / "whisper-base-int8-ov",
 )
 
+print("Downloading OpenVINO Qwen3 Embedding 0.6B INT8…")
+snapshot_download(
+    repo_id="OpenVINO/Qwen3-Embedding-0.6B-int8-ov",
+    local_dir=models / "Qwen3-Embedding-0.6B-int8-ov",
+)
+
 base = "https://storage.openvinotoolkit.org/repositories/open_model_zoo/2023.0/models_bin/1"
 for name in ("horizontal-text-detection-0001", "text-recognition-0014"):
     destination = models / "ocr" / name / "FP16"

@@ -1,0 +1,4 @@
+interface:
+  display_name: "Intel NPU Local Knowledge"
+  short_description: "Search private local files using Intel NPU"
+  default_prompt: "Use $intel-npu-local-knowledge to index my project and find the most relevant local context."

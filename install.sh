@@ -31,7 +31,7 @@ python3 -m venv "$VENV"
 "$VENV/bin/python" -m pip install "$PROJECT_DIR"
 INTEL_NPU_TOOLS_HOME="$DATA_DIR" "$VENV/bin/python" "$PROJECT_DIR/scripts/download-models.py"
 
-for command in intel-npu-info intel-npu-mcp intel-npu-ocr intel-npu-speech; do
+for command in intel-npu-info intel-npu-mcp intel-npu-ocr intel-npu-speech intel-npu-search; do
   target="$HOME/.local/bin/$command"
   if [[ -e "$target" && ! -L "$target" ]]; then
     mv "$target" "$target.before-intel-npu-tools-$(date +%Y%m%d-%H%M%S)"

@@ -27,7 +27,7 @@ for path, section in (
         servers.pop("intel-npu-tools", None)
         path.write_text(json.dumps(config, indent=2) + "\n")
 PY
-rm -f "$HOME/.local/bin/intel-npu-info" "$HOME/.local/bin/intel-npu-mcp" "$HOME/.local/bin/intel-npu-ocr" "$HOME/.local/bin/intel-npu-speech"
+rm -f "$HOME/.local/bin/intel-npu-info" "$HOME/.local/bin/intel-npu-mcp" "$HOME/.local/bin/intel-npu-ocr" "$HOME/.local/bin/intel-npu-speech" "$HOME/.local/bin/intel-npu-search"
 rm -f "$HOME/.local/share/applications/intel-npu-speech.desktop" "$HOME/.local/share/applications/intel-npu-ocr.desktop"
 rm -rf -- "$DATA_DIR"
 echo "User installation removed."
