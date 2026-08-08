@@ -57,6 +57,32 @@ if $WITH_MCP; then
   if command -v gemini >/dev/null && ! gemini mcp list 2>/dev/null | grep -q intel-npu-tools; then
     gemini mcp add --scope user intel-npu-tools "$MCP_COMMAND"
   fi
+  MCP_COMMAND="$MCP_COMMAND" python3 - <<'PY'
+import json, os
+from pathlib import Path
+
+command = os.environ["MCP_COMMAND"]
+configs = (
+    (Path.home() / ".gemini/config/mcp_config.json", "agy"),
+    (Path.home() / ".config/opencode/opencode.json", "opencode"),
+)
+for path, kind in configs:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    try:
+        config = json.loads(path.read_text()) if path.exists() and path.stat().st_size else {}
+    except json.JSONDecodeError:
+        backup = path.with_name(path.name + ".before-intel-npu-tools")
+        path.replace(backup)
+        config = {}
+    if kind == "agy":
+        config.setdefault("mcpServers", {})["intel-npu-tools"] = {"command": command, "args": []}
+    else:
+        config.setdefault("$schema", "https://opencode.ai/config.json")
+        config.setdefault("mcp", {})["intel-npu-tools"] = {
+            "type": "local", "command": [command], "enabled": True, "timeout": 60000
+        }
+    path.write_text(json.dumps(config, indent=2) + "\n")
+PY
   ANTIGRAVITY="$HOME/.gemini/antigravity/mcp_config.json"
   if [[ -d "$(dirname "$ANTIGRAVITY")" ]]; then
     MCP_COMMAND="$MCP_COMMAND" ANTIGRAVITY="$ANTIGRAVITY" python3 - <<'PY'
