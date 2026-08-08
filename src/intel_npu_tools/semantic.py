@@ -9,7 +9,6 @@ from pathlib import Path
 from typing import Callable, Iterable
 
 import numpy as np
-import openvino_genai as ov_genai
 
 from .paths import EMBEDDING_MODEL, SEMANTIC_DB
 
@@ -35,6 +34,8 @@ def embedding_pipeline():
     global _pipeline
     with _pipeline_lock:
         if _pipeline is None:
+            import openvino_genai as ov_genai
+
             if not EMBEDDING_MODEL.is_dir():
                 raise FileNotFoundError(
                     f"Embedding model not found at {EMBEDDING_MODEL}; run scripts/download-models.py"
