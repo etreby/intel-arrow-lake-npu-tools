@@ -14,7 +14,7 @@ The NPU is a good fit for efficient background inference. It does **not** replac
 
 - **Speech to text:** multilingual Whisper Base INT8 runs locally on the NPU.
 - **Screenshot OCR:** select a region and copy recognized English or Arabic text.
-- **MCP server:** Codex, Claude, Hermes, Antigravity, and other MCP clients can transcribe audio, record the microphone, OCR images, or read the current monitor.
+- **MCP server:** Codex, Claude, Gemini CLI, Hermes, Antigravity, and other MCP clients can transcribe audio, record the microphone, OCR images, or read the current monitor.
 - **Hardware diagnostics:** report every OpenVINO device and confirm `Intel(R) AI Boost` is available.
 - **Reversible installation:** user applications and models are isolated under `~/.local`; the uninstaller deliberately preserves system drivers.
 
@@ -123,6 +123,12 @@ Manual Hermes registration:
 
 ```bash
 hermes mcp add intel-npu-tools --command "$HOME/.local/bin/intel-npu-mcp"
+```
+
+Manual Gemini CLI registration:
+
+```bash
+gemini mcp add --scope user intel-npu-tools "$HOME/.local/bin/intel-npu-mcp"
 ```
 
 Any MCP client can use this stdio configuration:

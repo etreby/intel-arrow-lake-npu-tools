@@ -54,6 +54,9 @@ if $WITH_MCP; then
   if command -v hermes >/dev/null && ! hermes mcp list 2>/dev/null | grep -q intel-npu-tools; then
     printf 'Y\n' | hermes mcp add intel-npu-tools --command "$MCP_COMMAND" --connect-timeout 60
   fi
+  if command -v gemini >/dev/null && ! gemini mcp list 2>/dev/null | grep -q intel-npu-tools; then
+    gemini mcp add --scope user intel-npu-tools "$MCP_COMMAND"
+  fi
   ANTIGRAVITY="$HOME/.gemini/antigravity/mcp_config.json"
   if [[ -d "$(dirname "$ANTIGRAVITY")" ]]; then
     MCP_COMMAND="$MCP_COMMAND" ANTIGRAVITY="$ANTIGRAVITY" python3 - <<'PY'
