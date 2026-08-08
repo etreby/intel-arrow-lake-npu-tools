@@ -1,0 +1,45 @@
+[build-system]
+requires = ["setuptools>=69", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "intel-arrow-lake-npu-tools"
+version = "0.1.0"
+description = "Local OpenVINO speech, OCR, and MCP tools for Intel Arrow Lake NPUs on Linux"
+readme = "README.md"
+requires-python = ">=3.10"
+license = {file = "LICENSE"}
+authors = [{name = "Mohamed El-Etreby"}]
+keywords = ["intel", "arrow-lake", "npu", "openvino", "whisper", "ocr", "mcp"]
+classifiers = [
+  "Development Status :: 3 - Alpha",
+  "License :: OSI Approved :: MIT License",
+  "Operating System :: POSIX :: Linux",
+  "Programming Language :: Python :: 3",
+]
+dependencies = [
+  "huggingface-hub>=0.30",
+  "mcp>=2,<3",
+  "numpy>=1.26,<2.5",
+  "opencv-python-headless>=4.10",
+  "openvino==2026.2.1",
+  "openvino-genai==2026.2.1",
+  "openvino-tokenizers==2026.2.1.0",
+  "pillow>=10",
+]
+
+[project.urls]
+Homepage = "https://github.com/etreby/intel-arrow-lake-npu-tools"
+Issues = "https://github.com/etreby/intel-arrow-lake-npu-tools/issues"
+
+[project.scripts]
+intel-npu-info = "intel_npu_tools.info:main"
+intel-npu-mcp = "intel_npu_tools.mcp_server:main"
+intel-npu-ocr = "intel_npu_tools.ocr_app:main"
+intel-npu-speech = "intel_npu_tools.speech_app:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

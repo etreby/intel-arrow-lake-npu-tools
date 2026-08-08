@@ -1,0 +1,10 @@
+[Desktop Entry]
+Type=Application
+Name=Intel NPU Speech to Text
+Comment=Private local Whisper transcription on Intel AI Boost
+Exec=@HOME@/.local/bin/intel-npu-speech
+Icon=audio-input-microphone
+Terminal=false
+Categories=Utility;Accessibility;
+Keywords=Intel;NPU;OpenVINO;speech;transcription;
+X-KDE-Shortcuts=Meta+Alt+S
