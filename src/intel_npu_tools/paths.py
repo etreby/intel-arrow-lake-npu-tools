@@ -1,8 +1,9 @@
 import os
 from pathlib import Path
 
+from .config import DATA_DIR, text
 
-DATA_DIR = Path(os.environ.get("INTEL_NPU_TOOLS_HOME", Path.home() / ".local/share/intel-arrow-lake-npu-tools")).expanduser()
+
 MODEL_DIR = DATA_DIR / "models"
 DEFAULT_WHISPER_MODEL = "whisper-base-int8-ov"
 
@@ -26,9 +27,10 @@ def _model_directory_name(value: str, fallback: str) -> str:
 # upgrade: measured on noisy speech it transcribed 8/8 clips correctly at 10 dB
 # signal-to-noise where base managed 6/8, but it is 2.6 times slower per clip
 # and three times the download. Base stays the default for dictation in a quiet
-# room.
+# room. The value comes from the environment first and the settings file second,
+# so the control panel can change it while a one-off override still wins.
 WHISPER_MODEL = MODEL_DIR / _model_directory_name(
-    os.environ.get("INTEL_NPU_TOOLS_WHISPER_MODEL", ""), DEFAULT_WHISPER_MODEL
+    text("whisper_model", DEFAULT_WHISPER_MODEL), DEFAULT_WHISPER_MODEL
 )
 EMBEDDING_MODEL = MODEL_DIR / "Qwen3-Embedding-0.6B-int8-ov"
 RERANK_MODEL = MODEL_DIR / "bge-reranker-base-int8-ov"

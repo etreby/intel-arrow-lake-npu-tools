@@ -6,26 +6,20 @@ integration workflow asserts exactly that, because the heavy inference imports
 are what make the package slow to load and impossible to test without hardware.
 """
 
-import os
-
+from .config import ENVIRONMENT, flag
 from .paths import MODEL_CACHE_DIR
 
 
-TURBO_ENV = "INTEL_NPU_TOOLS_TURBO"
-MODEL_CACHE_ENV = "INTEL_NPU_TOOLS_MODEL_CACHE"
-_TRUTHY = {"1", "true", "yes", "on"}
-
-
-def _flag(name: str) -> bool:
-    return os.environ.get(name, "").strip().lower() in _TRUTHY
+TURBO_ENV = ENVIRONMENT["turbo"]
+MODEL_CACHE_ENV = ENVIRONMENT["model_cache"]
 
 
 def turbo_enabled() -> bool:
-    return _flag(TURBO_ENV)
+    return flag("turbo")
 
 
 def model_cache_enabled() -> bool:
-    return _flag(MODEL_CACHE_ENV)
+    return flag("model_cache")
 
 
 def npu_properties(**overrides) -> dict:

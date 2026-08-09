@@ -100,13 +100,10 @@ def tesseract_text(path: Path) -> str:
 
 
 def capture_current_monitor(target: Path) -> Path:
-    """Screenshot the focused monitor into target."""
-    subprocess.run(
-        ["spectacle", "--current", "--background", "--nonotify", "--output", str(target)],
-        check=True,
-        timeout=30,
-    )
-    return target
+    """Screenshot the screen into target, whatever desktop this is."""
+    from .desktop import capture
+
+    return capture(target, region=False)
 
 
 def tesseract_tsv(path: Path) -> str:

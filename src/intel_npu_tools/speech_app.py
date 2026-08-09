@@ -8,6 +8,7 @@ import tkinter as tk
 from tkinter import messagebox, ttk
 
 from .audio import decode_audio, pipeline, transcribe
+from .desktop import copy_text
 from .paths import HISTORY_FILE
 
 
@@ -77,7 +78,7 @@ class SpeechApp:
             HISTORY_FILE.parent.mkdir(parents=True, exist_ok=True)
             with HISTORY_FILE.open("a", encoding="utf-8") as history:
                 history.write(f"\n[{datetime.now().isoformat(timespec='seconds')}]\n{result}\n")
-            subprocess.run(["wl-copy", "--", result], check=True)
+            copy_text(result)
             def update():
                 self.text.delete("1.0", "end")
                 self.text.insert("1.0", result)
@@ -91,7 +92,7 @@ class SpeechApp:
             self.discard_recording()
 
     def copy(self):
-        subprocess.run(["wl-copy", "--", self.text.get("1.0", "end").strip()])
+        copy_text(self.text.get("1.0", "end").strip())
 
     def close(self):
         if self.recorder:
