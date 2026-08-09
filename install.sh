@@ -86,12 +86,26 @@ SHORTCUTS_FILE="${XDG_CONFIG_HOME:-$HOME/.config}/kglobalshortcutsrc"
 conflicting_entry() {
   local accelerator="$1" desktop="$2"
   [[ -r "$SHORTCUTS_FILE" ]] || return 0
+  # Compare whole accelerators, not substrings. A substring test reports F9 as
+  # taken because Meta+F9 contains it, and Alt+O because Meta+Alt+O does, which
+  # would refuse perfectly free keys. Each value is "active,default,friendly",
+  # and the active field may hold several accelerators separated by tabs.
   awk -v want="$accelerator" -v skip="[$desktop]" '
     /^\[/ { group = $0; next }
-    index($0, want "," ) && group != skip {
-      split($0, kv, "=")
-      printf "%s (%s)", kv[1], substr(group, 2, length(group) - 2)
-      exit
+    {
+      equals = index($0, "=")
+      if (equals == 0 || group == skip) next
+      key = substr($0, 1, equals - 1)
+      value = substr($0, equals + 1)
+      comma = index(value, ",")
+      active = (comma ? substr(value, 1, comma - 1) : value)
+      count = split(active, bindings, "\t")
+      for (i = 1; i <= count; i++) {
+        if (bindings[i] == want) {
+          printf "%s (%s)", key, substr(group, 2, length(group) - 2)
+          exit
+        }
+      }
     }
   ' "$SHORTCUTS_FILE"
 }
