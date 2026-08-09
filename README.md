@@ -48,7 +48,7 @@ download the models, which also keeps package installation off the network.
 ./scripts/build-deb.sh                                  # Debian, Ubuntu, Pop!_OS
 cd packaging && makepkg -si                             # Arch
 rpmbuild -bb packaging/intel-npu-tools.spec \
-         --define "_projectdir $PWD"                    # Fedora, RHEL, openSUSE
+         --define "_projectdir $PWD"                    # Fedora (openSUSE and EL untested)
 ```
 
 All three install the same tree from `scripts/stage-package.sh`, so they cannot

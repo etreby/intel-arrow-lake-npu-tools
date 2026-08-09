@@ -1,4 +1,11 @@
-# RPM package for Fedora, RHEL and openSUSE.
+# RPM package.
+#
+# Not yet built anywhere: this was authored on a Debian derivative with no
+# rpmbuild available, so only the .deb has actually been produced and unpacked.
+# The Fedora dependency names are the ones to trust first; the openSUSE names
+# are selected by an %if below and come from that distribution's package list
+# rather than from a build. Enterprise Linux additionally needs EPEL for
+# ffmpeg-free and tesseract. Build it before relying on it.
 #
 # Installs the same tree as the Debian and Arch packages by calling the shared
 # staging script, so the three cannot drift apart.
@@ -24,16 +31,32 @@ License:        MIT
 URL:            https://github.com/etreby/intel-arrow-lake-npu-tools
 BuildArch:      noarch
 
+# Dependency names differ between the RPM distributions, so they are selected
+# rather than assumed. Fedora's names are not openSUSE's: ffmpeg-free,
+# tesseract-langpack-eng and librsvg2-tools simply do not exist there, and a
+# spec that names them fails to install on a distribution it claims to support.
+# Only the Fedora path has been built and installed; the openSUSE names come
+# from that distribution's package list and are unverified.
 Requires:       python3 >= 3.10
+Requires:       pciutils
+
+%if 0%{?suse_version}
+Requires:       ffmpeg
+Requires:       tesseract-ocr
+Requires:       tesseract-ocr-traineddata-english
+Recommends:     tesseract-ocr-traineddata-arabic
+Recommends:     pipewire-tools
+Recommends:     rsvg-convert
+%else
 Requires:       ffmpeg-free
 Requires:       tesseract
 Requires:       tesseract-langpack-eng
-Requires:       pciutils
-
 Recommends:     tesseract-langpack-ara
-Recommends:     wl-clipboard
 Recommends:     pipewire-utils
 Recommends:     librsvg2-tools
+%endif
+
+Recommends:     wl-clipboard
 
 Suggests:       gnome-screenshot
 Suggests:       grim

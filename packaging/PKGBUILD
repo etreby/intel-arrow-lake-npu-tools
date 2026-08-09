@@ -7,6 +7,9 @@
 # they are redistributed under their own licences, and OpenVINO is not in the
 # Arch repositories. Each user runs intel-npu-tools-setup once.
 #
+# Not yet built: authored on a Debian derivative with no makepkg available.
+# The file is syntax-checked only. Build it before relying on it.
+#
 # Build with: makepkg -si
 pkgname=intel-npu-tools
 pkgver=0.3.0
