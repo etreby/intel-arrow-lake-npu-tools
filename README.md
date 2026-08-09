@@ -36,6 +36,32 @@ The initial tested target is:
 
 OpenVINO officially identifies Arrow Lake's NPU 3720 by PCI ID `0xAD1D`. Other Intel NPU generations may work with code changes, but the bundled driver safety check intentionally refuses unknown PCI IDs.
 
+## What it looks like
+
+The control panel is where every feature can be tried and every setting changed.
+
+![Voice tab: record from the microphone or transcribe a file, on the NPU](docs/images/panel-voice.png)
+
+Search indexes a folder and retrieves passages by meaning, and `context_filter`
+returns only the lines of one large file that answer a question.
+
+![Search tab: semantic search across an indexed folder](docs/images/panel-search.png)
+
+Settings that used to be environment variables are editable and persistent. Each
+option states what it measured, so the trade is visible before it is made.
+
+![Config tab: speech model, compiled-model caching, and turbo](docs/images/panel-config.png)
+
+The status tab reports the device, the driver, which models are installed, and
+what the desktop session can actually do — useful when a screenshot or the
+clipboard is not working.
+
+![Status tab: OpenVINO devices, NPU driver and compiler, installed models, desktop capabilities](docs/images/panel-status.png)
+
+Regenerate these with `scripts/capture-screenshots.sh`. It runs each window on a
+virtual display, so the images do not depend on anyone's wallpaper or theme and
+stay reproducible as the interface changes.
+
 ## Install from a package
 
 Native packages install the toolkit system-wide. They deliberately contain no

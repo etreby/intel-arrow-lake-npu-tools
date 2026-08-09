@@ -1,0 +1,39 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>Intel NPU Tools — apt repository</title>
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<style>
+  :root { color-scheme: light dark; --bg:#fff; --fg:#1b1f24; --muted:#5a6472; --surface:#f3f5f8; --border:#d7dde5; }
+  @media (prefers-color-scheme: dark) {
+    :root { --bg:#181a1f; --fg:#eef1f6; --muted:#9aa3b2; --surface:#22252b; --border:#333a45; }
+  }
+  body { background:var(--bg); color:var(--fg); font:16px/1.6 system-ui,sans-serif; margin:0 auto; max-width:46rem; padding:3rem 1.25rem; }
+  h1 { font-size:1.6rem; margin:0 0 .25rem; }
+  p.lead { color:var(--muted); margin:0 0 2rem; }
+  pre { background:var(--surface); border:1px solid var(--border); border-radius:8px; padding:1rem; overflow-x:auto; }
+  code { font:14px/1.5 ui-monospace,monospace; }
+  footer { color:var(--muted); font-size:.9rem; margin-top:2.5rem; }
+  a { color:inherit; }
+</style>
+<h1>Intel NPU Tools</h1>
+<p class="lead">A signed apt repository for Debian, Ubuntu and Pop!_OS.</p>
+
+<p>Add the repository and its signing key, then install:</p>
+<pre><code>curl -fsSL @REPO_URL@/apt/intel-npu-tools-archive-keyring.gpg \
+  | sudo tee /etc/apt/keyrings/intel-npu-tools.gpg &gt; /dev/null
+
+echo "deb [signed-by=/etc/apt/keyrings/intel-npu-tools.gpg] @REPO_URL@/apt ./" \
+  | sudo tee /etc/apt/sources.list.d/intel-npu-tools.list
+
+sudo apt update
+sudo apt install intel-npu-tools</code></pre>
+
+<p>Then, once, as your own user — this builds your environment and downloads the
+models, which the package deliberately does not contain:</p>
+<pre><code>intel-npu-tools-setup</code></pre>
+
+<footer>
+  Source and issues:
+  <a href="https://github.com/etreby/intel-arrow-lake-npu-tools">github.com/etreby/intel-arrow-lake-npu-tools</a>.
+  Not affiliated with Intel Corporation.
+</footer>

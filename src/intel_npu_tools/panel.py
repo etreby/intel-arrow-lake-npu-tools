@@ -118,8 +118,54 @@ class Panel:
         style.map("TCheckbutton", background=[("active", BACKGROUND)])
         style.configure("TNotebook", background=BACKGROUND, borderwidth=0)
         style.configure("TNotebook.Tab", padding=(16, 8))
-        style.configure("TCombobox", fieldbackground=SURFACE, background=SURFACE)
-        style.configure("TEntry", fieldbackground=SURFACE, foreground=FOREGROUND)
+        # A combobox draws its text through the "readonly" state rather than the
+        # base configuration, so styling only the base leaves the selected value
+        # in the theme's default grey-on-grey and effectively unreadable. The
+        # dropdown itself is a plain Tk listbox and takes its colours from the
+        # option database instead of from ttk at all.
+        style.configure(
+            "TCombobox",
+            fieldbackground=SURFACE,
+            background=SURFACE,
+            foreground=FOREGROUND,
+            arrowcolor=FOREGROUND,
+            bordercolor=MUTED,
+            lightcolor=SURFACE,
+            darkcolor=SURFACE,
+        )
+        # A readonly combobox renders its value as *selected* text, so when it
+        # takes focus the selection colours win over fieldbackground and the
+        # field flips to the theme's light default. Every focus state has to be
+        # pinned, not just "readonly", or the widget turns white on click.
+        style.map(
+            "TCombobox",
+            fieldbackground=[
+                ("readonly", "focus", SURFACE),
+                ("readonly", SURFACE),
+                ("disabled", BACKGROUND),
+            ],
+            foreground=[
+                ("readonly", "focus", FOREGROUND),
+                ("readonly", FOREGROUND),
+                ("disabled", MUTED),
+            ],
+            selectbackground=[("readonly", "focus", SURFACE), ("readonly", SURFACE)],
+            selectforeground=[("readonly", "focus", FOREGROUND), ("readonly", FOREGROUND)],
+            arrowcolor=[("readonly", FOREGROUND)],
+        )
+        self.root.option_add("*TCombobox*Listbox.background", SURFACE)
+        self.root.option_add("*TCombobox*Listbox.foreground", FOREGROUND)
+        self.root.option_add("*TCombobox*Listbox.selectBackground", ACCENT)
+        self.root.option_add("*TCombobox*Listbox.selectForeground", "#ffffff")
+        style.configure("TEntry", fieldbackground=SURFACE, foreground=FOREGROUND, insertcolor=FOREGROUND)
+        # The check indicator is a separate element; without this it stays the
+        # theme's light grey and reads as an unchecked box even when ticked.
+        style.configure("TCheckbutton", indicatorcolor=SURFACE, focuscolor=BACKGROUND)
+        style.map(
+            "TCheckbutton",
+            indicatorcolor=[("selected", ACCENT), ("!selected", SURFACE)],
+            foreground=[("disabled", MUTED)],
+        )
 
     def _text(self, parent, height=12) -> tk.Text:
         widget = tk.Text(
