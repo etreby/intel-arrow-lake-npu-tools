@@ -91,10 +91,10 @@ Launch these applications from the desktop menu:
 
 On KDE, `install.sh` registers two global shortcuts:
 
-- `Meta+Alt+S` — Speech to Text
+- `Meta+F9` — Speech to Text
 - `Meta+Alt+O` — Screenshot OCR
 
-`Meta` is normally the Windows-logo key. **The shortcuts start working after your next login**, because KDE's shortcut daemon reads its configuration once at session start; restarting it during an install would briefly drop every other shortcut on the system. If you had already bound either application to a key of your own, the installer leaves your binding alone. On a desktop without KDE's configuration tools the registration is skipped and the applications are launched from the desktop menu instead.
+`Meta` is normally the Windows-logo key. **The shortcuts start working after your next login**, because KDE's shortcut daemon reads its configuration once at session start; restarting it during an install would briefly drop every other shortcut on the system. If you had already bound either application to a key of your own, the installer leaves your binding alone, and it refuses to write a key another component already owns rather than registering one KDE would silently discard. Speech uses `Meta+F9` rather than the `Meta+Alt+S` of earlier versions, because KDE's accessibility component binds `Meta+Alt+S` to "Toggle Screen Reader On and Off" by default, so that shortcut could never have worked. On a desktop without KDE's configuration tools the registration is skipped and the applications are launched from the desktop menu instead.
 
 ## AI agent and MCP usage
 

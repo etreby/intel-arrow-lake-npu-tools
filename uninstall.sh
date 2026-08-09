@@ -44,7 +44,7 @@ PY
 rm -f "$HOME/.local/bin/intel-npu-info" "$HOME/.local/bin/intel-npu-mcp" "$HOME/.local/bin/intel-npu-ocr" "$HOME/.local/bin/intel-npu-speech" "$HOME/.local/bin/intel-npu-search"
 rm -f "$HOME/.local/share/applications/intel-npu-speech.desktop" "$HOME/.local/share/applications/intel-npu-ocr.desktop"
 
-# Release the global shortcuts, so Meta+Alt+S and Meta+Alt+O are free again
+# Release the global shortcuts, so Meta+F9 and Meta+Alt+O are free again
 # rather than staying bound to applications that no longer exist.
 #
 # Only the binding this project wrote is removed. install.sh deliberately keeps
@@ -76,7 +76,7 @@ release_shortcut() {
   done
 }
 if [[ -n "$KWRITECONFIG" ]]; then
-  release_shortcut intel-npu-speech.desktop "Meta+Alt+S,Meta+Alt+S,Intel NPU Speech to Text"
+  release_shortcut intel-npu-speech.desktop "Meta+F9,Meta+F9,Intel NPU Speech to Text"
   release_shortcut intel-npu-ocr.desktop "Meta+Alt+O,Meta+Alt+O,Intel NPU Screenshot OCR"
 fi
 rm -rf -- "$DATA_DIR"

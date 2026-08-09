@@ -69,12 +69,35 @@ update-desktop-database "$HOME/.local/share/applications" 2>/dev/null || true
 # field when it builds its service cache for system-installed applications; for
 # a desktop file dropped into ~/.local/share/applications it records nothing, so
 # the shortcut silently never exists. Earlier versions of this installer relied
-# on it and the documented Meta+Alt+S and Meta+Alt+O simply did not work.
+# on it and the documented shortcuts simply did not work.
 #
 # kglobalaccel keys each entry by desktop file name, and the value is
 # "active,default,friendly name".
+SHORTCUTS_FILE="${XDG_CONFIG_HOME:-$HOME/.config}/kglobalshortcutsrc"
+
+# Report the entry already holding an accelerator, if any.
+#
+# Writing a binding that another component owns is worse than not writing one:
+# kglobalaccel silently blanks the active field at the next login, leaving
+# "_launch=,Meta+Alt+S,..." behind, and the shortcut appears to be installed
+# while doing nothing. Meta+Alt+S is the concrete case — kaccess binds it to
+# "Toggle Screen Reader On and Off" on a stock KDE, so the speech shortcut this
+# project documented could never have worked on any KDE machine.
+conflicting_entry() {
+  local accelerator="$1" desktop="$2"
+  [[ -r "$SHORTCUTS_FILE" ]] || return 0
+  awk -v want="$accelerator" -v skip="[$desktop]" '
+    /^\[/ { group = $0; next }
+    index($0, want "," ) && group != skip {
+      split($0, kv, "=")
+      printf "%s (%s)", kv[1], substr(group, 2, length(group) - 2)
+      exit
+    }
+  ' "$SHORTCUTS_FILE"
+}
+
 register_shortcut() {
-  local desktop="$1" accelerator="$2" label="$3"
+  local desktop="$1" accelerator="$2" label="$3" taken
   if [[ -z "${KWRITECONFIG:-}" ]]; then
     return 0
   fi
@@ -82,6 +105,12 @@ register_shortcut() {
   if [[ -n "${KREADCONFIG:-}" ]] &&
      [[ -n "$("$KREADCONFIG" --file kglobalshortcutsrc --group "$desktop" --key _launch 2>/dev/null)" ]]; then
     echo "Keeping the existing shortcut for $label."
+    return 0
+  fi
+  taken="$(conflicting_entry "$accelerator" "$desktop")"
+  if [[ -n "$taken" ]]; then
+    echo "Not registering $accelerator for $label: already used by $taken."
+    echo "  Bind it yourself in System Settings if you want it on a different key."
     return 0
   fi
   "$KWRITECONFIG" --file kglobalshortcutsrc --group "$desktop" --key _k_friendly_name "$label"
@@ -92,7 +121,7 @@ register_shortcut() {
 KWRITECONFIG="$(command -v kwriteconfig6 || command -v kwriteconfig5 || true)"
 KREADCONFIG="$(command -v kreadconfig6 || command -v kreadconfig5 || true)"
 if [[ -n "$KWRITECONFIG" ]]; then
-  register_shortcut intel-npu-speech.desktop "Meta+Alt+S" "Intel NPU Speech to Text"
+  register_shortcut intel-npu-speech.desktop "Meta+F9" "Intel NPU Speech to Text"
   register_shortcut intel-npu-ocr.desktop "Meta+Alt+O" "Intel NPU Screenshot OCR"
   # kglobalaccel only reads this file at startup, so the keys start working
   # after the next login. Restarting it here would drop every other global

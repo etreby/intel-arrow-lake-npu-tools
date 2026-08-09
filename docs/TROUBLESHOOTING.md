@@ -29,11 +29,19 @@ Expected on some queries, and the reason it is opt-in. The cross-encoder is reli
 
 ## A keyboard shortcut does nothing
 
-`Meta+Alt+S` and `Meta+Alt+O` are registered by `install.sh` into KDE's `kglobalshortcutsrc`, and KDE's shortcut daemon reads that file only when a session starts. Log out and back in after installing. Check that the binding exists:
+`Meta+F9` and `Meta+Alt+O` are registered by `install.sh` into KDE's `kglobalshortcutsrc`, and KDE's shortcut daemon reads that file only when a session starts. Log out and back in after installing. Check that the binding exists:
 
 ```bash
 kreadconfig5 --file kglobalshortcutsrc --group intel-npu-speech.desktop --key _launch
 ```
+
+**A binding whose first field is empty** — `_launch=,Meta+F9,Intel NPU Speech to Text` — means KDE found another component already holding that key and discarded ours at login. Find the owner and pick a different key:
+
+```bash
+grep -n "Meta+F9" ~/.config/kglobalshortcutsrc
+```
+
+This is why speech moved off `Meta+Alt+S`: KDE's accessibility component binds it to "Toggle Screen Reader On and Off" by default. The installer now refuses to write a key that is already taken rather than registering one that will be discarded.
 
 An empty result means it was never registered, which is what happens when the KDE configuration tools are absent or the desktop is not KDE. Bind the application yourself in System Settings, or start it from the desktop menu.
 
