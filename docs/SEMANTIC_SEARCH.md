@@ -45,7 +45,9 @@ The SQLite database is stored at `~/.local/share/intel-arrow-lake-npu-tools/sema
 
 ## Measured reference performance
 
-On the original Arrow Lake NPU 3720 test machine, indexing this repository's 29 eligible files and 57 chunks took 15.2 seconds. A warm query took approximately 1.5 seconds. Model compilation took approximately 10.7 seconds before caching. Results vary with driver, storage, file sizes, and OpenVINO version.
+On the Arrow Lake NPU 3720 test machine, indexing this repository's 36 eligible files and 125 chunks from an empty database took 31.7 seconds with the model already compiled. A warm query took approximately 1.5 seconds. Model compilation took approximately 10.7 seconds before caching. Results vary with driver, storage, file sizes, and OpenVINO version.
+
+The earlier figure of 15.2 seconds was measured over 29 files and 57 chunks, before directories holding model weights were excluded and before chunks were capped for the 512-token limit. Roughly twice the chunks now take roughly twice as long; the per-chunk cost is unchanged.
 
 ## Customization
 
