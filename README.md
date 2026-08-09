@@ -1,6 +1,6 @@
 # Intel Arrow Lake NPU Tools for Linux
 
-An unofficial, community-maintained toolkit that makes the integrated **Intel AI Boost NPU** in Arrow Lake processors useful on Linux. It provides private semantic search, local speech transcription, screenshot OCR, hardware verification, and ten MCP tools that AI agents can call.
+An unofficial, community-maintained toolkit that makes the integrated **Intel AI Boost NPU** in Arrow Lake processors useful on Linux. It provides private semantic search, local speech transcription, screenshot OCR, hardware verification, and twelve MCP tools that AI agents can call.
 
 [![Validate](https://github.com/etreby/intel-arrow-lake-npu-tools/actions/workflows/validate.yml/badge.svg)](https://github.com/etreby/intel-arrow-lake-npu-tools/actions/workflows/validate.yml)
 [![Release](https://img.shields.io/github/v/release/etreby/intel-arrow-lake-npu-tools)](https://github.com/etreby/intel-arrow-lake-npu-tools/releases)
@@ -16,10 +16,11 @@ The NPU is a good fit for efficient background inference. It does **not** replac
 
 ## Features
 
-- **Speech to text:** multilingual Whisper Base INT8 runs locally on the NPU.
+- **Speech to text:** multilingual Whisper Base INT8 runs locally on the NPU. Whisper Small is available for noisier rooms; see the [roadmap](docs/ROADMAP.md) for the accuracy and latency trade.
 - **Screenshot OCR:** select a region and copy recognized English or Arabic text.
 - **Private semantic search:** index local documents, logs, and source code with Qwen3-Embedding 0.6B INT8, then retrieve passages by meaning.
-- **MCP server:** Codex, Claude, Gemini CLI, AGY/Antigravity CLI, Hermes, Antigravity IDE, OpenCode, and other MCP clients can use all ten tools.
+- **Smaller agent context:** `context_filter` returns only the lines of a large log or file that answer a question, verbatim and with line numbers, and `screen_to_text` renders a screen as a few hundred tokens of structured text rather than a multi-thousand-token image.
+- **MCP server:** Codex, Claude, Gemini CLI, AGY/Antigravity CLI, Hermes, Antigravity IDE, OpenCode, and other MCP clients can use all twelve tools.
 - **Hardware diagnostics:** report every OpenVINO device and confirm `Intel(R) AI Boost` is available.
 - **Reversible installation:** user applications and models are isolated under `~/.local`; the uninstaller deliberately preserves system drivers.
 
@@ -69,7 +70,7 @@ To skip automatic MCP client registration:
 ./install.sh --without-mcp
 ```
 
-The model download is approximately 800 MB in total, including Whisper, OCR, and the roughly 600 MB embedding model.
+The model download is approximately 800 MB in total, including Whisper, OCR, and the roughly 600 MB embedding model. Two optional models are excluded by default: `--with-whisper-small` (~250 MB, better in noise) and `--with-reranker` (~300 MB, sharper search results).
 
 ## Semantic search in 30 seconds
 
@@ -88,12 +89,12 @@ Launch these applications from the desktop menu:
 - **Intel NPU Speech to Text:** click Start, speak, then Stop and transcribe. The result is copied to the clipboard.
 - **Intel NPU Screenshot OCR:** select a rectangular region. Recognized text is displayed and copied.
 
-KDE shortcut declarations:
+On KDE, `install.sh` registers two global shortcuts:
 
 - `Meta+Alt+S` — Speech to Text
 - `Meta+Alt+O` — Screenshot OCR
 
-`Meta` is normally the Windows-logo key. Desktop environments may require one new login before discovering newly installed shortcuts.
+`Meta` is normally the Windows-logo key. **The shortcuts start working after your next login**, because KDE's shortcut daemon reads its configuration once at session start; restarting it during an install would briefly drop every other shortcut on the system. If you had already bound either application to a key of your own, the installer leaves your binding alone. On a desktop without KDE's configuration tools the registration is skipped and the applications are launched from the desktop menu instead.
 
 ## AI agent and MCP usage
 
@@ -112,8 +113,10 @@ It exposes:
 | `record_and_transcribe` | Record the default microphone for a bounded duration |
 | `ocr_image` | Extract English/Arabic text from an image |
 | `ocr_current_monitor` | Capture and OCR the current monitor |
+| `screen_to_text` | Read a screen as structured text instead of an image |
 | `semantic_index` | Incrementally index a text file or directory on the NPU |
 | `semantic_search` | Retrieve ranked local passages by meaning |
+| `context_filter` | Return only the parts of a large file that answer a question |
 | `semantic_index_status` | Show indexed roots, files, chunks, and database path |
 | `open_speech_app` | Open the interactive speech application |
 | `open_ocr_selector` | Open interactive region OCR |

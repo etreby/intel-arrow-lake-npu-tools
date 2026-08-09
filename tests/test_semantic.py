@@ -411,3 +411,112 @@ def test_a_fresh_database_is_not_reported_as_rebuilt(tmp_path: Path):
     result = build_index(tmp_path / "index.sqlite3").index(str(documents))
     assert result["files_rechunked"] == 0
     assert "rebuilt" not in result
+
+
+class FakeRerank:
+    """Ranks by keyword count, the reverse of FakePipeline's cosine order."""
+
+    last_texts: list[str] = []
+
+    def rerank(self, query, texts):
+        FakeRerank.last_texts = list(texts)
+        scored = [(index, float(text.lower().count("engine"))) for index, text in enumerate(texts)]
+        return sorted(scored, key=lambda pair: pair[1], reverse=True)
+
+
+def build_reranking_index(db_path: Path) -> SemanticIndex:
+    return SemanticIndex(db_path, pipeline_factory=FakePipeline, rerank_factory=FakeRerank)
+
+
+def _corpus(tmp_path: Path) -> Path:
+    root = tmp_path / "corpus"
+    root.mkdir()
+    for number in range(30):
+        engines = "engine " * (number % 5)
+        (root / f"doc{number:02d}.txt").write_text(
+            f"apple network notes {number}\n{engines}\ntrailing line {number}\n", encoding="utf-8"
+        )
+    return root
+
+
+def test_reranking_reorders_and_annotates(tmp_path):
+    """A reranked hit must be identifiable without the return type changing."""
+    index = build_reranking_index(tmp_path / "db.sqlite3")
+    index.index(str(_corpus(tmp_path)))
+    results = index.search("engine", limit=5, rerank=True)
+    assert all("rerank_score" in hit for hit in results)
+    assert all("score" in hit for hit in results)
+    scores = [hit["rerank_score"] for hit in results]
+    assert scores == sorted(scores, reverse=True)
+
+
+def test_reranking_sees_at_most_the_candidate_ceiling(tmp_path):
+    """Cost must stay bounded no matter how large the index grows."""
+    index = build_reranking_index(tmp_path / "db.sqlite3")
+    index.index(str(_corpus(tmp_path)))
+    index.search("engine", limit=5, rerank=True)
+    assert len(FakeRerank.last_texts) <= semantic.RERANK_CANDIDATES
+
+
+def test_rerank_result_count_respects_limit(tmp_path):
+    index = build_reranking_index(tmp_path / "db.sqlite3")
+    index.index(str(_corpus(tmp_path)))
+    assert len(index.search("engine", limit=3, rerank=True)) == 3
+
+
+def test_rerank_true_without_a_model_is_an_explicit_error(tmp_path, monkeypatch):
+    """Asking for a missing model must not silently degrade to plain search."""
+    monkeypatch.setattr(semantic, "RERANK_MODEL", tmp_path / "absent")
+    monkeypatch.setattr("intel_npu_tools.rerank.RERANK_MODEL", tmp_path / "absent")
+    index = build_index(tmp_path / "db.sqlite3")
+    index.index(str(_corpus(tmp_path)))
+    with pytest.raises(FileNotFoundError, match="--with-reranker"):
+        index.search("engine", rerank=True)
+
+
+def test_search_without_a_reranker_is_unchanged(tmp_path, monkeypatch):
+    monkeypatch.setattr("intel_npu_tools.rerank.RERANK_MODEL", tmp_path / "absent")
+    index = build_index(tmp_path / "db.sqlite3")
+    index.index(str(_corpus(tmp_path)))
+    results = index.search("engine", limit=4)
+    assert results and all("rerank_score" not in hit for hit in results)
+
+
+def test_rerank_false_never_constructs_the_pipeline(tmp_path):
+    """Opting out must not pay the compile cost of a model it will not use."""
+
+    def explode():
+        raise AssertionError("the reranker was constructed despite rerank=False")
+
+    index = SemanticIndex(
+        tmp_path / "db.sqlite3", pipeline_factory=FakePipeline, rerank_factory=explode
+    )
+    index.index(str(_corpus(tmp_path)))
+    assert index.search("engine", limit=3, rerank=False)
+
+
+def test_reranking_an_empty_index_returns_nothing(tmp_path):
+    """rerank(query, []) would be a wasted compile and a confusing call."""
+
+    def explode():
+        raise AssertionError("the reranker was constructed for an empty result set")
+
+    index = SemanticIndex(
+        tmp_path / "db.sqlite3", pipeline_factory=FakePipeline, rerank_factory=explode
+    )
+    assert index.search("engine", limit=3) == []
+
+
+def test_reranking_is_off_unless_asked_for(tmp_path):
+    """Measured on this repo the cross-encoder hurts as often as it helps, so
+    having the model installed must not silently change every search."""
+
+    def explode():
+        raise AssertionError("the reranker ran without being requested")
+
+    index = SemanticIndex(
+        tmp_path / "db.sqlite3", pipeline_factory=FakePipeline, rerank_factory=explode
+    )
+    index.index(str(_corpus(tmp_path)))
+    results = index.search("engine", limit=3)
+    assert results and all("rerank_score" not in hit for hit in results)

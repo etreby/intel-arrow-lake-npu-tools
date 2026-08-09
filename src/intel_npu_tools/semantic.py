@@ -13,7 +13,8 @@ from typing import Callable, Iterable, Iterator
 
 import numpy as np
 
-from .paths import EMBEDDING_MODEL, SEMANTIC_DB
+from .paths import EMBEDDING_MODEL, RERANK_MODEL, SEMANTIC_DB
+from .runtime import npu_properties
 
 
 TEXT_SUFFIXES = {
@@ -46,6 +47,12 @@ QUERY_INSTRUCTION = "Given a search query, retrieve relevant passages from the u
 # Files belonging to roots that are not re-indexed keep working untouched.
 CHUNKER_VERSION = "2"
 LEGACY_CHUNKER_VERSION = "1"
+# Passages handed to the cross-encoder. Twenty is the ceiling search() already
+# imposes on `limit`, so reranking never scores a passage the API could not have
+# returned anyway, and the cost stays bounded at about one second regardless of
+# `limit`. The trade-off is that at limit=20 reranking only reorders what the
+# embedding scan already chose; the recall benefit is largest at small limits.
+RERANK_CANDIDATES = 20
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS files (
@@ -85,9 +92,16 @@ def embedding_pipeline():
             config.query_instruction = f"Instruct: {QUERY_INSTRUCTION}\nQuery:"
             # The Ubuntu NPU packages provide the compiler through the driver.
             _pipeline = ov_genai.TextEmbeddingPipeline(
-                str(EMBEDDING_MODEL), "NPU", config, NPU_COMPILER_TYPE="DRIVER"
+                str(EMBEDDING_MODEL), "NPU", config, **npu_properties()
             )
     return _pipeline
+
+
+def _default_rerank_factory():
+    """Imported lazily so that OpenVINO stays out of this module's import path."""
+    from .rerank import rerank_pipeline
+
+    return rerank_pipeline()
 
 
 def _split_lines(lines: list[str], first_line: int, max_chars: int) -> list[tuple[int, int, str]]:
@@ -259,9 +273,28 @@ def _connect(db_path: Path) -> Iterator[sqlite3.Connection]:
 
 
 class SemanticIndex:
-    def __init__(self, db_path: Path = SEMANTIC_DB, pipeline_factory: Callable = embedding_pipeline):
+    def __init__(
+        self,
+        db_path: Path = SEMANTIC_DB,
+        pipeline_factory: Callable = embedding_pipeline,
+        rerank_factory: Callable | None = None,
+    ):
         self.db_path = Path(db_path)
         self.pipeline_factory = pipeline_factory
+        self.rerank_factory = rerank_factory
+
+    def _rerank_available(self) -> bool:
+        """An injected factory means available; otherwise ask the filesystem.
+
+        Consulting the filesystem only when nothing was injected keeps tests
+        from silently depending on whether the developer's machine happens to
+        have the optional model downloaded.
+        """
+        if self.rerank_factory is not None:
+            return True
+        from .rerank import available
+
+        return available()
 
     def _prune_removed(self, db: sqlite3.Connection, root: Path, present: set[str]) -> int:
         """Drop rows for files under this root that no longer exist on disk.
@@ -373,11 +406,30 @@ class SemanticIndex:
             )
         return result
 
-    def search(self, query: str, limit: int = 5, root: str | None = None) -> list[dict]:
+    def search(
+        self,
+        query: str,
+        limit: int = 5,
+        root: str | None = None,
+        rerank: bool | None = None,
+    ) -> list[dict]:
         query = query.strip()
         if not query:
             raise ValueError("Search query cannot be empty")
         limit = max(1, min(int(limit), 20))
+        # Off unless asked for. Measured on this repository, the cross-encoder
+        # helps when it is confident and hurts when it is not: on a query whose
+        # answer it recognised it promoted the right passage with a +4.95 logit,
+        # but on one where nothing scored above -6.2 it discarded the correct
+        # hit that cosine had ranked first. Presence of the model is not
+        # evidence the user wants that trade on every search.
+        if rerank is None:
+            rerank = False
+        elif rerank and not self._rerank_available():
+            raise FileNotFoundError(
+                f"Reranking was requested but the model is not at {RERANK_MODEL}; run "
+                "scripts/download-models.py --with-reranker"
+            )
         vector = np.asarray(self.pipeline_factory().embed_query(query), dtype=np.float32)
         sql = "SELECT path,start_line,end_line,content,vector,dimensions FROM chunks"
         params: list[str] = []
@@ -396,7 +448,28 @@ class SemanticIndex:
                     "end_line": end, "text": content,
                 })
         results.sort(key=lambda item: item["score"], reverse=True)
-        return results[:limit]
+        if not rerank or not results:
+            return results[:limit]
+        return self._rerank(query, results[:RERANK_CANDIDATES], limit)
+
+    def _rerank(self, query: str, candidates: list[dict], limit: int) -> list[dict]:
+        """Re-score the embedding shortlist with the cross-encoder and reorder it.
+
+        The cosine value stays in `score` so callers that already read it keep
+        working, and `rerank_score` is added only to passages the cross-encoder
+        actually saw. That is also how a caller tells a reranked result set from
+        a plain one without the return type changing. The two are not
+        comparable: `rerank_score` is an unbounded logit, so a reranked list is
+        no longer sorted by `score`.
+        """
+        factory = self.rerank_factory or _default_rerank_factory
+        ranked = factory().rerank(query, [item["text"] for item in candidates])
+        reordered = []
+        for index, score in ranked[:limit]:
+            item = dict(candidates[index])
+            item["rerank_score"] = round(float(score), 6)
+            reordered.append(item)
+        return reordered
 
     def status(self) -> dict:
         with _connect(self.db_path) as db:
@@ -415,13 +488,23 @@ def main():
     search_parser.add_argument("query")
     search_parser.add_argument("--limit", type=int, default=5)
     search_parser.add_argument("--root")
+    # Tri-state: unset means use the reranker when its model is installed.
+    rerank_group = search_parser.add_mutually_exclusive_group()
+    rerank_group.add_argument(
+        "--rerank", dest="rerank", action="store_true", default=None,
+        help="Re-score results with the cross-encoder (error if not installed)",
+    )
+    rerank_group.add_argument(
+        "--no-rerank", dest="rerank", action="store_false",
+        help="Skip the cross-encoder even when its model is installed",
+    )
     sub.add_parser("status", help="Show index statistics")
     args = parser.parse_args()
     index = SemanticIndex()
     if args.command == "index":
         result = index.index(args.path)
     elif args.command == "search":
-        result = index.search(args.query, args.limit, args.root)
+        result = index.search(args.query, args.limit, args.root, args.rerank)
     else:
         result = index.status()
     print(json.dumps(result, indent=2, ensure_ascii=False))

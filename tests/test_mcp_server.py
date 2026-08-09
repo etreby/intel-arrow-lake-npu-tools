@@ -21,6 +21,8 @@ EXPECTED_TOOLS = {
     "ocr_current_monitor",
     "semantic_index",
     "semantic_search",
+    "context_filter",
+    "screen_to_text",
     "semantic_index_status",
     "open_speech_app",
     "open_ocr_selector",

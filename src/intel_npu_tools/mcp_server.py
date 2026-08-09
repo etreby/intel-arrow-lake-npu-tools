@@ -5,7 +5,8 @@ from pathlib import Path
 from mcp.server import MCPServer
 
 from .audio import transcribe_file
-from .ocr import extract_text
+from .context_filter import filter_context
+from .ocr import capture_current_monitor, extract_text, structured_text
 from .paths import WHISPER_MODEL
 from .semantic import SemanticIndex
 
@@ -17,6 +18,8 @@ mcp = MCPServer(
 )
 
 semantic = SemanticIndex()
+
+IMAGE_SUFFIXES = (".png", ".jpg", ".jpeg", ".webp", ".bmp", ".tif", ".tiff")
 
 
 def local_file(value: str, suffixes: tuple[str, ...]) -> Path:
@@ -57,15 +60,45 @@ def record_and_transcribe(seconds: int = 10) -> str:
 @mcp.tool()
 def ocr_image(image_path: str) -> dict:
     """Extract English and Arabic text from a local image using NPU text models."""
-    return extract_text(local_file(image_path, (".png", ".jpg", ".jpeg", ".webp", ".bmp", ".tif", ".tiff")))
+    return extract_text(local_file(image_path, IMAGE_SUFFIXES))
 
 
 @mcp.tool()
 def ocr_current_monitor() -> dict:
     """Capture the current monitor and extract its text."""
     with tempfile.NamedTemporaryFile(suffix=".png") as image:
-        subprocess.run(["spectacle", "--current", "--background", "--nonotify", "--output", image.name], check=True, timeout=30)
-        return extract_text(Path(image.name))
+        return extract_text(capture_current_monitor(Path(image.name)))
+
+
+@mcp.tool()
+def screen_to_text(
+    image_path: str | None = None, detail: str = "lines", min_confidence: int = 40
+) -> dict:
+    """Read a screenshot as compact structured text instead of sending an image.
+
+    A screenshot costs a vision model roughly 1,600 to 4,800 image tokens. This
+    returns the same screen as a few hundred tokens of text in reading order,
+    with a bounding box per line, so you can see what is on screen and where to
+    click without spending them. Omit image_path to capture the current monitor.
+
+    detail is "lines" (default: text plus one box per line), "text" (cheapest,
+    reading order only), or "words" (a box per word — on a dense screen this can
+    cost MORE tokens than the screenshot did, and the reply says so when it has).
+
+    Read these limits before relying on it. The text comes from Tesseract OCR, so
+    it is a best-effort transcription and not a user-interface tree: it cannot
+    report widget types, enabled or checked state, focus, scroll position, or
+    anything off-screen, and it misreads small or low-contrast text. **If the
+    target is a web page, use Playwright's accessibility tree instead** — that is
+    already structured text, it is exact, it includes content scrolled out of
+    view, and it costs no model tokens to produce. This tool is for surfaces with
+    no such tree: native desktop applications, remote desktops, canvas and WebGL,
+    video frames, and scanned documents.
+    """
+    if image_path:
+        return structured_text(local_file(image_path, IMAGE_SUFFIXES), detail, min_confidence)
+    with tempfile.NamedTemporaryFile(suffix=".png") as image:
+        return structured_text(capture_current_monitor(Path(image.name)), detail, min_confidence)
 
 
 @mcp.tool()
@@ -75,9 +108,40 @@ def semantic_index(path: str) -> dict:
 
 
 @mcp.tool()
-def semantic_search(query: str, limit: int = 5, root: str | None = None) -> list[dict]:
-    """Search indexed local files by meaning using Intel NPU embeddings."""
-    return semantic.search(query, limit, root)
+def semantic_search(
+    query: str, limit: int = 5, root: str | None = None, rerank: bool | None = None
+) -> list[dict]:
+    """Search indexed local files by meaning using Intel NPU embeddings.
+
+    When the optional reranker model is installed, the top passages are re-scored
+    by a cross-encoder and each hit gains a `rerank_score`. That score is an
+    unbounded logit, not a cosine, so do not compare it against `score`. Pass
+    rerank=false to skip the extra second of work.
+    """
+    return semantic.search(query, limit, root, rerank)
+
+
+@mcp.tool()
+def context_filter(path: str, query: str, limit: int = 8, context_lines: int = 0) -> dict:
+    """Extract only the parts of a large local text file that are relevant to a question.
+
+    Use this instead of reading a big build log, test output, diff, or data file
+    into your context. Write the output to a file first, then filter it:
+
+        make 2>&1 | tee /tmp/build.log
+        context_filter("/tmp/build.log", "why did the linker step fail")
+
+    Returns spans copied verbatim from the file with exact line numbers, never a
+    summary, so quoted text and line numbers can be cited. It also reports how
+    much was dropped and how close the best dropped chunk scored, so you can tell
+    when to widen the query or raise limit rather than assuming full coverage.
+
+    Chunks are embedded on the Intel NPU and ranked by cosine similarity; nothing
+    is written to the semantic index and nothing leaves this machine. This is not
+    a substitute for grep: when you know the exact string to look for, grep is
+    faster, free, and exact. Files under 4 KB and over 256 KB are rejected.
+    """
+    return filter_context(path, query, limit, context_lines)
 
 
 @mcp.tool()

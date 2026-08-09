@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "intel-arrow-lake-npu-tools"
-version = "0.2.1"
+version = "0.3.0"
 description = "Local OpenVINO speech, OCR, semantic search, and MCP tools for Intel Arrow Lake NPUs on Linux"
 readme = "README.md"
 requires-python = ">=3.10"

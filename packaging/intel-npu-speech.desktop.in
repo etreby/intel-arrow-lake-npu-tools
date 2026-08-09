@@ -7,4 +7,7 @@ Icon=audio-input-microphone
 Terminal=false
 Categories=Utility;Accessibility;
 Keywords=Intel;NPU;OpenVINO;speech;transcription;
+# X-KDE-Shortcuts is declarative only. KDE honours it for applications installed
+# system-wide, but ignores it for a desktop file in ~/.local/share/applications,
+# so install.sh registers the shortcut in kglobalshortcutsrc directly.
 X-KDE-Shortcuts=Meta+Alt+S

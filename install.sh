@@ -23,8 +23,28 @@ if $WITH_DRIVER; then
   "$PROJECT_DIR/scripts/install-intel-npu-driver-ubuntu.sh"
 fi
 
-sudo apt-get update
-sudo apt-get install -y python3-venv ffmpeg pipewire-bin kde-spectacle tesseract-ocr tesseract-ocr-eng tesseract-ocr-ara wl-clipboard pciutils
+# Install only what is actually missing.
+#
+# Doing this unconditionally used to abort the whole install on machines whose
+# apt configuration has an unrelated problem, because `apt-get update` exits
+# non-zero for any failing source and this script runs under `set -e`. A stale
+# cdrom:// entry left behind by an installation from USB media is enough, and
+# has nothing to do with these packages. Checking first also means a machine
+# that already has everything is never asked for a sudo password at all.
+APT_PACKAGES=(python3-venv ffmpeg pipewire-bin kde-spectacle tesseract-ocr tesseract-ocr-eng tesseract-ocr-ara wl-clipboard pciutils)
+MISSING_PACKAGES=()
+for package in "${APT_PACKAGES[@]}"; do
+  dpkg -s "$package" >/dev/null 2>&1 || MISSING_PACKAGES+=("$package")
+done
+if ((${#MISSING_PACKAGES[@]})); then
+  echo "Installing system packages: ${MISSING_PACKAGES[*]}"
+  # A failing update is not fatal: the install below can still succeed from the
+  # cached package lists, and it reports its own error if it cannot.
+  sudo apt-get update || echo "Warning: apt-get update failed; continuing with the cached package lists."
+  sudo apt-get install -y "${MISSING_PACKAGES[@]}"
+else
+  echo "All required system packages are already installed."
+fi
 mkdir -p "$DATA_DIR" "$HOME/.local/bin" "$HOME/.local/share/applications"
 python3 -m venv "$VENV"
 "$VENV/bin/python" -m pip install --upgrade pip
@@ -42,6 +62,47 @@ done
 sed -e "s|@HOME@|$HOME|g" "$PROJECT_DIR/packaging/intel-npu-speech.desktop.in" > "$HOME/.local/share/applications/intel-npu-speech.desktop"
 sed -e "s|@HOME@|$HOME|g" "$PROJECT_DIR/packaging/intel-npu-ocr.desktop.in" > "$HOME/.local/share/applications/intel-npu-ocr.desktop"
 update-desktop-database "$HOME/.local/share/applications" 2>/dev/null || true
+
+# Register the KDE global shortcuts.
+#
+# The X-KDE-Shortcuts line in each desktop file does not do this. KDE reads that
+# field when it builds its service cache for system-installed applications; for
+# a desktop file dropped into ~/.local/share/applications it records nothing, so
+# the shortcut silently never exists. Earlier versions of this installer relied
+# on it and the documented Meta+Alt+S and Meta+Alt+O simply did not work.
+#
+# kglobalaccel keys each entry by desktop file name, and the value is
+# "active,default,friendly name".
+register_shortcut() {
+  local desktop="$1" accelerator="$2" label="$3"
+  if [[ -z "${KWRITECONFIG:-}" ]]; then
+    return 0
+  fi
+  # Never overwrite a binding the user has already chosen for this application.
+  if [[ -n "${KREADCONFIG:-}" ]] &&
+     [[ -n "$("$KREADCONFIG" --file kglobalshortcutsrc --group "$desktop" --key _launch 2>/dev/null)" ]]; then
+    echo "Keeping the existing shortcut for $label."
+    return 0
+  fi
+  "$KWRITECONFIG" --file kglobalshortcutsrc --group "$desktop" --key _k_friendly_name "$label"
+  "$KWRITECONFIG" --file kglobalshortcutsrc --group "$desktop" --key _launch "$accelerator,$accelerator,$label"
+  echo "Registered $accelerator for $label."
+}
+
+KWRITECONFIG="$(command -v kwriteconfig6 || command -v kwriteconfig5 || true)"
+KREADCONFIG="$(command -v kreadconfig6 || command -v kreadconfig5 || true)"
+if [[ -n "$KWRITECONFIG" ]]; then
+  register_shortcut intel-npu-speech.desktop "Meta+Alt+S" "Intel NPU Speech to Text"
+  register_shortcut intel-npu-ocr.desktop "Meta+Alt+O" "Intel NPU Screenshot OCR"
+  # kglobalaccel only reads this file at startup, so the keys start working
+  # after the next login. Restarting it here would drop every other global
+  # shortcut for a moment, which is not a reasonable thing for an installer to
+  # do to a running desktop session.
+  echo "Keyboard shortcuts take effect after your next login."
+else
+  echo "KDE configuration tools not found; skipping keyboard shortcut registration."
+  echo "Launch the applications from the desktop menu, or bind them yourself in System Settings."
+fi
 
 if $WITH_MCP; then
   MCP_COMMAND="$HOME/.local/bin/intel-npu-mcp"

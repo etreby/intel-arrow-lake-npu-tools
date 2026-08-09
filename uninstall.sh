@@ -43,5 +43,41 @@ for path, section in (
 PY
 rm -f "$HOME/.local/bin/intel-npu-info" "$HOME/.local/bin/intel-npu-mcp" "$HOME/.local/bin/intel-npu-ocr" "$HOME/.local/bin/intel-npu-speech" "$HOME/.local/bin/intel-npu-search"
 rm -f "$HOME/.local/share/applications/intel-npu-speech.desktop" "$HOME/.local/share/applications/intel-npu-ocr.desktop"
+
+# Release the global shortcuts, so Meta+Alt+S and Meta+Alt+O are free again
+# rather than staying bound to applications that no longer exist.
+#
+# Only the binding this project wrote is removed. install.sh deliberately keeps
+# a shortcut the user had already chosen for these applications, so deleting it
+# here would make uninstalling destroy configuration that installing respected.
+# A value that no longer matches what the installer wrote is the user's, not
+# ours, and is left alone.
+KWRITECONFIG="$(command -v kwriteconfig6 || command -v kwriteconfig5 || true)"
+KREADCONFIG="$(command -v kreadconfig6 || command -v kreadconfig5 || true)"
+release_shortcut() {
+  local desktop="$1" installed="$2" current
+  if [[ -z "$KREADCONFIG" ]]; then
+    # Without a way to read the current value there is no way to tell our
+    # binding from the user's, and leaving a dead shortcut behind is the less
+    # damaging of the two mistakes.
+    echo "Cannot read KDE configuration; leaving the shortcut for $desktop in place."
+    return 0
+  fi
+  current="$("$KREADCONFIG" --file kglobalshortcutsrc --group "$desktop" --key _launch 2>/dev/null || true)"
+  if [[ -z "$current" ]]; then
+    return 0
+  fi
+  if [[ "$current" != "$installed" ]]; then
+    echo "Keeping your customised shortcut for $desktop."
+    return 0
+  fi
+  for key in _launch _k_friendly_name; do
+    "$KWRITECONFIG" --file kglobalshortcutsrc --group "$desktop" --key "$key" --delete 2>/dev/null || true
+  done
+}
+if [[ -n "$KWRITECONFIG" ]]; then
+  release_shortcut intel-npu-speech.desktop "Meta+Alt+S,Meta+Alt+S,Intel NPU Speech to Text"
+  release_shortcut intel-npu-ocr.desktop "Meta+Alt+O,Meta+Alt+O,Intel NPU Screenshot OCR"
+fi
 rm -rf -- "$DATA_DIR"
 echo "User installation removed."

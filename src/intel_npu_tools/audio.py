@@ -5,6 +5,7 @@ from pathlib import Path
 import numpy as np
 
 from .paths import WHISPER_MODEL
+from .runtime import npu_properties
 
 
 _pipeline = None
@@ -32,7 +33,7 @@ def pipeline():
 
             if not WHISPER_MODEL.exists():
                 raise FileNotFoundError(f"Whisper model not found at {WHISPER_MODEL}; run scripts/download-models.py")
-            _pipeline = ov_genai.WhisperPipeline(str(WHISPER_MODEL), "NPU")
+            _pipeline = ov_genai.WhisperPipeline(str(WHISPER_MODEL), "NPU", **npu_properties())
         return _pipeline
 
 

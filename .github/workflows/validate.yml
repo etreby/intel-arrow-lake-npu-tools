@@ -16,7 +16,7 @@ jobs:
       - name: Install shellcheck
         run: sudo apt-get update && sudo apt-get install -y shellcheck
       - name: Compile Python
-        run: python -m compileall -q src tests scripts/download-models.py
+        run: python -m compileall -q src tests scripts
       - name: Run unit tests
         run: |
           python -m pip install pytest build twine numpy "mcp>=2,<3"
@@ -24,7 +24,7 @@ jobs:
       - name: Verify the MCP entry point imports
         # OpenVINO is not installed here, so this also proves the heavy
         # inference imports stay lazy and the server starts on any machine.
-        run: PYTHONPATH=src python -c "from intel_npu_tools import mcp_server, ocr, audio, info, semantic"
+        run: PYTHONPATH=src python -c "from intel_npu_tools import mcp_server, ocr, audio, info, semantic, runtime, context_filter, rerank"
       - name: Validate shell
         run: |
           bash -n install.sh uninstall.sh scripts/*.sh

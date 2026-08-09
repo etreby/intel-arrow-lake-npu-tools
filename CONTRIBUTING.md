@@ -24,6 +24,8 @@ bash -n install.sh uninstall.sh scripts/*.sh
 
 NPU runtime tests require compatible hardware. If you cannot test on an NPU, say so clearly in the pull request.
 
+If a change claims a performance effect, show it with `scripts/benchmark.py` and paste the table, which carries a header naming the driver, compiler, and OpenVINO versions it ran against. Re-run any load-time difference before reporting it: the driver's compiled-blob cache is shared and evictable, so a single load measurement can be a cold compile rather than the effect you are describing.
+
 ## Pull requests
 
 - Explain what changed and why.

@@ -7,6 +7,7 @@ This repository contains original integration code. It downloads, imports, or in
 - OpenVINO GenAI — Apache License 2.0: https://github.com/openvinotoolkit/openvino.genai
 - OpenVINO Whisper models — see each Hugging Face model card and original OpenAI Whisper license.
 - Qwen3-Embedding 0.6B and its OpenVINO INT8 conversion — Apache License 2.0; see the Qwen and OpenVINO Hugging Face model cards.
+- BGE Reranker Base and its OpenVINO INT8 conversion — MIT License; see the BAAI and OpenVINO Hugging Face model cards. Downloaded only when `scripts/download-models.py --with-reranker` is used.
 - Open Model Zoo models — see https://github.com/openvinotoolkit/open_model_zoo
 - MCP Python SDK — MIT License: https://github.com/modelcontextprotocol/python-sdk
 - Tesseract OCR — Apache License 2.0: https://github.com/tesseract-ocr/tesseract
