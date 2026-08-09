@@ -32,9 +32,31 @@ The initial tested target is:
 - Intel Core Ultra 200-series desktop processors, including Core Ultra 9 285K
 - Ubuntu 24.04 or an Ubuntu 24.04-compatible distribution
 - Linux kernel 6.8 or newer with `intel_vpu`
-- KDE Plasma Wayland for the included screenshot workflow
+- KDE Plasma, GNOME, COSMIC, or a wlroots compositor; X11 works too. Screenshots use whichever of spectacle, gnome-screenshot, cosmic-screenshot, grim, maim or scrot is installed, and the clipboard uses wl-clipboard, xclip or xsel.
 
 OpenVINO officially identifies Arrow Lake's NPU 3720 by PCI ID `0xAD1D`. Other Intel NPU generations may work with code changes, but the bundled driver safety check intentionally refuses unknown PCI IDs.
+
+## Install from a package
+
+Native packages install the toolkit system-wide. They deliberately contain no
+models and no OpenVINO runtime: those are large, are redistributed under their
+own licences, and OpenVINO is not in any distribution archive. Each user runs
+`intel-npu-tools-setup` once afterwards to build their own environment and
+download the models, which also keeps package installation off the network.
+
+```bash
+./scripts/build-deb.sh                                  # Debian, Ubuntu, Pop!_OS
+cd packaging && makepkg -si                             # Arch
+rpmbuild -bb packaging/intel-npu-tools.spec \
+         --define "_projectdir $PWD"                    # Fedora, RHEL, openSUSE
+```
+
+All three install the same tree from `scripts/stage-package.sh`, so they cannot
+drift apart. Then, as your own user:
+
+```bash
+intel-npu-tools-setup            # add --with-reranker and --with-whisper-small if wanted
+```
 
 ## Quick installation
 
@@ -88,6 +110,7 @@ Launch these applications from the desktop menu:
 
 - **Intel NPU Speech to Text:** click Start, speak, then Stop and transcribe. The result is copied to the clipboard.
 - **Intel NPU Screenshot OCR:** select a rectangular region. Recognized text is displayed and copied.
+- **Intel NPU Control Panel:** try every feature, change settings, and see what the NPU and the desktop session can actually do. Run `intel-npu-panel`.
 
 On KDE, `install.sh` registers two global shortcuts:
 

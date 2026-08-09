@@ -1,0 +1,90 @@
+#!/bin/bash
+# Prepare a user's environment after the package is installed.
+#
+# The package deliberately contains no models and no inference stack. The
+# models are roughly 800 MB and are redistributed under their own licences, and
+# OpenVINO is not in the Debian, Fedora or Arch archives, so neither belongs in
+# a system package. Downloading them from a maintainer script would also be
+# wrong: package installation must not depend on the network, and it runs as
+# root while these files belong to a user.
+#
+# So the package ships the code, and this creates the per-user environment.
+# Running it twice is safe.
+set -euo pipefail
+
+LIBDIR="${INTEL_NPU_TOOLS_LIBDIR:-/usr/lib/intel-npu-tools}"
+DATA_DIR="${INTEL_NPU_TOOLS_HOME:-$HOME/.local/share/intel-arrow-lake-npu-tools}"
+VENV="$DATA_DIR/venv"
+WITH_RERANKER=false
+WITH_WHISPER_SMALL=false
+WITH_MCP=true
+
+usage() {
+  cat <<'EOF'
+Usage: intel-npu-tools-setup [options]
+
+Creates the per-user Python environment and downloads the models.
+
+  --with-reranker        also fetch the cross-encoder used by --rerank (~300 MB)
+  --with-whisper-small   also fetch the noise-robust speech model (~250 MB)
+  --without-mcp          skip registering the MCP server with AI agent clients
+  -h, --help             show this message
+EOF
+}
+
+for argument in "$@"; do
+  case "$argument" in
+    --with-reranker) WITH_RERANKER=true ;;
+    --with-whisper-small) WITH_WHISPER_SMALL=true ;;
+    --without-mcp) WITH_MCP=false ;;
+    -h|--help) usage; exit 0 ;;
+    *) echo "Unknown option: $argument" >&2; usage >&2; exit 2 ;;
+  esac
+done
+
+if [[ $EUID -eq 0 ]]; then
+  echo "Run this as your own user, not as root: it builds an environment in your home directory." >&2
+  exit 1
+fi
+
+if [[ ! -d "$LIBDIR" ]]; then
+  echo "The toolkit's files are not at $LIBDIR. Is the package installed?" >&2
+  exit 1
+fi
+
+echo "Creating the Python environment in $VENV…"
+mkdir -p "$DATA_DIR"
+python3 -m venv "$VENV"
+"$VENV/bin/python" -m pip install --upgrade --quiet pip
+# Installed from the copy the package shipped, so this never reaches the
+# network for the toolkit itself — only for its published dependencies.
+"$VENV/bin/python" -m pip install --quiet "$LIBDIR"
+
+DOWNLOAD_ARGUMENTS=()
+$WITH_RERANKER && DOWNLOAD_ARGUMENTS+=(--with-reranker)
+$WITH_WHISPER_SMALL && DOWNLOAD_ARGUMENTS+=(--with-whisper-small)
+echo "Downloading models (about 800 MB on a first run)…"
+INTEL_NPU_TOOLS_HOME="$DATA_DIR" "$VENV/bin/python" "$LIBDIR/scripts/download-models.py" \
+  ${DOWNLOAD_ARGUMENTS[@]+"${DOWNLOAD_ARGUMENTS[@]}"}
+
+if $WITH_MCP; then
+  MCP_COMMAND="/usr/bin/intel-npu-mcp"
+  if command -v codex >/dev/null && ! codex mcp get intel-npu-tools >/dev/null 2>&1; then
+    codex mcp add intel-npu-tools -- "$MCP_COMMAND" || true
+  fi
+  if command -v claude >/dev/null && ! claude mcp get intel-npu-tools >/dev/null 2>&1; then
+    claude mcp add --scope user --transport stdio intel-npu-tools -- "$MCP_COMMAND" || true
+  fi
+  if command -v gemini >/dev/null && ! gemini mcp list 2>/dev/null | grep -q intel-npu-tools; then
+    gemini mcp add --scope user intel-npu-tools "$MCP_COMMAND" || true
+  fi
+fi
+
+echo
+"$VENV/bin/intel-npu-info" || true
+cat <<EOF
+
+Setup complete. Launch "Intel NPU Control Panel" from the desktop menu, or run
+intel-npu-panel. If the NPU is not listed above, install Intel's driver and log
+out and back in; see /usr/share/doc/intel-npu-tools/README.md.
+EOF

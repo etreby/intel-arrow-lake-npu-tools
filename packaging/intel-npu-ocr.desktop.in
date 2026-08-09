@@ -2,8 +2,8 @@
 Type=Application
 Name=Intel NPU Screenshot OCR
 Comment=Extract screen text using Intel AI Boost
-Exec=@HOME@/.local/bin/intel-npu-ocr
-Icon=scanner
+Exec=@BINDIR@/intel-npu-ocr
+Icon=intel-npu-tools
 Terminal=false
 Categories=Utility;Accessibility;
 Keywords=Intel;NPU;OpenVINO;OCR;screenshot;

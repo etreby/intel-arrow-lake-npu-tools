@@ -1,0 +1,30 @@
+#!/bin/bash
+# Wrapper installed as /usr/bin/@COMMAND@ by the distribution packages.
+#
+# The real program lives in a per-user virtual environment rather than in
+# system site-packages, because its inference stack is not packaged by any
+# distribution and its models belong to the user rather than to the system. If
+# that environment is missing the user gets a sentence telling them what to
+# run, which is the whole reason this is a wrapper and not a symlink.
+set -euo pipefail
+
+DATA_DIR="${INTEL_NPU_TOOLS_HOME:-$HOME/.local/share/intel-arrow-lake-npu-tools}"
+PROGRAM="$DATA_DIR/venv/bin/@COMMAND@"
+
+if [[ ! -x "$PROGRAM" ]]; then
+  message="Intel NPU Tools is installed but not yet set up for this user.
+Run: intel-npu-tools-setup"
+  # Graphical launches have no terminal to print to, so say it in a dialog when
+  # one of the usual ones is available and fall back to stderr otherwise.
+  if [[ ! -t 2 ]]; then
+    if command -v kdialog >/dev/null; then
+      kdialog --error "$message" 2>/dev/null && exit 1
+    elif command -v zenity >/dev/null; then
+      zenity --error --no-wrap --text="$message" 2>/dev/null && exit 1
+    fi
+  fi
+  echo "$message" >&2
+  exit 1
+fi
+
+exec "$PROGRAM" "$@"

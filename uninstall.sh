@@ -41,8 +41,13 @@ for path, section in (
         servers.pop("intel-npu-tools", None)
         path.write_text(json.dumps(config, indent=2) + "\n")
 PY
-rm -f "$HOME/.local/bin/intel-npu-info" "$HOME/.local/bin/intel-npu-mcp" "$HOME/.local/bin/intel-npu-ocr" "$HOME/.local/bin/intel-npu-speech" "$HOME/.local/bin/intel-npu-search"
-rm -f "$HOME/.local/share/applications/intel-npu-speech.desktop" "$HOME/.local/share/applications/intel-npu-ocr.desktop"
+for command in intel-npu-info intel-npu-mcp intel-npu-ocr intel-npu-speech intel-npu-search intel-npu-panel; do
+  rm -f "$HOME/.local/bin/$command"
+done
+rm -f "$HOME/.local/share/applications/intel-npu-speech.desktop" \
+      "$HOME/.local/share/applications/intel-npu-ocr.desktop" \
+      "$HOME/.local/share/applications/intel-npu-panel.desktop"
+find "$HOME/.local/share/icons/hicolor" -name "intel-npu-tools.*" -delete 2>/dev/null || true
 
 # Release the global shortcuts, so Meta+F9 and Meta+Alt+O are free again
 # rather than staying bound to applications that no longer exist.

@@ -1,0 +1,12 @@
+[Desktop Entry]
+Type=Application
+Name=Intel NPU Control Panel
+GenericName=NPU Toolkit
+Comment=Try every Intel AI Boost feature and change its settings
+Exec=@BINDIR@/intel-npu-panel
+Icon=intel-npu-tools
+Terminal=false
+Categories=Utility;
+Keywords=Intel;NPU;OpenVINO;speech;OCR;search;
+StartupNotify=true
+StartupWMClass=intel-npu-panel

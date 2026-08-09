@@ -1,0 +1,38 @@
+# Maintainer: Mohamed El-Etreby <40498+etreby@users.noreply.github.com>
+#
+# Arch Linux package. Installs the same tree as the Debian and RPM packages by
+# calling the shared staging script, so the three cannot drift apart.
+#
+# The models and the OpenVINO runtime are deliberately absent: they are large,
+# they are redistributed under their own licences, and OpenVINO is not in the
+# Arch repositories. Each user runs intel-npu-tools-setup once.
+#
+# Build with: makepkg -si
+pkgname=intel-npu-tools
+pkgver=0.3.0
+pkgrel=1
+pkgdesc="Local speech, OCR and semantic search on the Intel AI Boost NPU"
+arch=('any')
+url="https://github.com/etreby/intel-arrow-lake-npu-tools"
+license=('MIT')
+depends=('python' 'ffmpeg' 'tesseract' 'tesseract-data-eng' 'pciutils')
+optdepends=(
+  'tesseract-data-ara: Arabic text recognition'
+  'wl-clipboard: clipboard support on Wayland'
+  'xclip: clipboard support on X11'
+  'pipewire: microphone capture for speech to text'
+  'librsvg: renders the application icon at every size'
+  'grim: screenshots on sway, Hyprland and other wlroots compositors'
+  'spectacle: screenshots on KDE Plasma'
+  'gnome-screenshot: screenshots on GNOME'
+)
+# Built from the working tree rather than a release tarball, so that a local
+# change can be packaged and tested without publishing it first.
+source=()
+sha256sums=()
+
+package() {
+  local project="$(cd "$startdir/.." && pwd)"
+  "$project/scripts/stage-package.sh" "$pkgdir" /usr
+  install -Dm644 "$project/LICENSE" "$pkgdir/usr/share/licenses/$pkgname/LICENSE"
+}

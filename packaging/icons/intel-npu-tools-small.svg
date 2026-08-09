@@ -1,0 +1,18 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" width="32" height="32">
+  <title>Intel NPU Tools</title>
+  <!--
+    The 16, 22, 24 and 32 pixel variant. The full icon's package pins and five
+    waveform bars are correct at 48 pixels and up, and turn to noise below it:
+    the pins dissolve into a dotted fringe that eats the silhouette, and the
+    bars merge into a solid block. This drops the pins entirely and keeps three
+    fat bars on a larger die, so the shape still reads as a chip with a voice
+    in it at the size used by panels and title bars.
+  -->
+  <rect x="3" y="3" width="26" height="26" rx="6" fill="#3b7ddd"/>
+  <rect x="3" y="3" width="26" height="26" rx="6" fill="none" stroke="#12336b" stroke-width="1.5"/>
+  <g fill="#f2f6ff">
+    <rect x="9" y="13" width="3.5" height="6" rx="1.75"/>
+    <rect x="14.25" y="8.5" width="3.5" height="15" rx="1.75"/>
+    <rect x="19.5" y="12" width="3.5" height="8" rx="1.75"/>
+  </g>
+</svg>

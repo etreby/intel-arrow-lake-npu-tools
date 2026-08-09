@@ -51,7 +51,7 @@ python3 -m venv "$VENV"
 "$VENV/bin/python" -m pip install "$PROJECT_DIR"
 INTEL_NPU_TOOLS_HOME="$DATA_DIR" "$VENV/bin/python" "$PROJECT_DIR/scripts/download-models.py"
 
-for command in intel-npu-info intel-npu-mcp intel-npu-ocr intel-npu-speech intel-npu-search; do
+for command in intel-npu-info intel-npu-mcp intel-npu-ocr intel-npu-speech intel-npu-search intel-npu-panel; do
   target="$HOME/.local/bin/$command"
   if [[ -e "$target" && ! -L "$target" ]]; then
     mv "$target" "$target.before-intel-npu-tools-$(date +%Y%m%d-%H%M%S)"
@@ -59,9 +59,16 @@ for command in intel-npu-info intel-npu-mcp intel-npu-ocr intel-npu-speech intel
   ln -sfn "$VENV/bin/$command" "$target"
 done
 
-sed -e "s|@HOME@|$HOME|g" "$PROJECT_DIR/packaging/intel-npu-speech.desktop.in" > "$HOME/.local/share/applications/intel-npu-speech.desktop"
-sed -e "s|@HOME@|$HOME|g" "$PROJECT_DIR/packaging/intel-npu-ocr.desktop.in" > "$HOME/.local/share/applications/intel-npu-ocr.desktop"
+for application in intel-npu-speech intel-npu-ocr intel-npu-panel; do
+  sed -e "s|@BINDIR@|$HOME/.local/bin|g" "$PROJECT_DIR/packaging/$application.desktop.in" \
+    > "$HOME/.local/share/applications/$application.desktop"
+done
 update-desktop-database "$HOME/.local/share/applications" 2>/dev/null || true
+
+# The icon is referenced by name, so it has to exist in a theme the desktop
+# searches; without this the launcher shows a generic placeholder.
+"$PROJECT_DIR/scripts/render-icons.sh" "$HOME/.local/share/icons/hicolor"
+gtk-update-icon-cache -qtf "$HOME/.local/share/icons/hicolor" 2>/dev/null || true
 
 # Register the KDE global shortcuts.
 #

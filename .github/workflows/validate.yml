@@ -24,12 +24,23 @@ jobs:
       - name: Verify the MCP entry point imports
         # OpenVINO is not installed here, so this also proves the heavy
         # inference imports stay lazy and the server starts on any machine.
-        run: PYTHONPATH=src python -c "from intel_npu_tools import mcp_server, ocr, audio, info, semantic, runtime, context_filter, rerank"
+        run: PYTHONPATH=src python -c "from intel_npu_tools import mcp_server, ocr, audio, info, semantic, runtime, context_filter, rerank, config, desktop, panel"
+      - name: Validate desktop entries and build a package
+        run: |
+          sudo apt-get install -y desktop-file-utils librsvg2-bin
+          ./scripts/build-deb.sh dist
+          dpkg-deb --contents dist/*.deb | grep -q 'usr/bin/intel-npu-panel'
+          mkdir -p /tmp/debcheck && dpkg-deb -x dist/*.deb /tmp/debcheck
+          for entry in /tmp/debcheck/usr/share/applications/*.desktop; do
+            desktop-file-validate "$entry"
+          done
+          # Models and build residue must never end up in a package.
+          ! find /tmp/debcheck \( -name '*.bin' -o -name '__pycache__' -o -name '*.egg-info' \) | grep -q .
       - name: Validate shell
         run: |
-          bash -n install.sh uninstall.sh scripts/*.sh
-          shellcheck install.sh uninstall.sh scripts/*.sh
+          bash -n install.sh uninstall.sh scripts/*.sh packaging/intel-npu-tools-setup
+          shellcheck install.sh uninstall.sh scripts/*.sh packaging/intel-npu-tools-setup
       - name: Build and check release artifacts
         run: |
           python -m build
-          python -m twine check dist/*
+          python -m twine check dist/*.whl dist/*.tar.gz

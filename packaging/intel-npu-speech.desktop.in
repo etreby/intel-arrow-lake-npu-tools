@@ -2,8 +2,8 @@
 Type=Application
 Name=Intel NPU Speech to Text
 Comment=Private local Whisper transcription on Intel AI Boost
-Exec=@HOME@/.local/bin/intel-npu-speech
-Icon=audio-input-microphone
+Exec=@BINDIR@/intel-npu-speech
+Icon=intel-npu-tools
 Terminal=false
 Categories=Utility;Accessibility;
 Keywords=Intel;NPU;OpenVINO;speech;transcription;
