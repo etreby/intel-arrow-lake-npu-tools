@@ -16,7 +16,26 @@ from intel_npu_tools import config, panel
 
 
 def _display() -> bool:
-    return bool(os.environ.get("DISPLAY") or os.environ.get("WAYLAND_DISPLAY"))
+    """Whether a display can actually be opened, not merely whether one is named.
+
+    Checking the variables alone is not enough: DISPLAY is routinely set to
+    something unreachable — a stale value inherited by a sandbox, or an X server
+    that refuses the connection because no authorization cookie came with it —
+    and every widget test then fails on TclError instead of skipping, which
+    reads as broken code rather than a machine without a display. Connecting
+    once is the only honest test, so that is what this does.
+    """
+    if not (os.environ.get("DISPLAY") or os.environ.get("WAYLAND_DISPLAY")):
+        return False
+    try:
+        import tkinter
+    except ImportError:  # a Python built without Tk
+        return False
+    try:
+        tkinter.Tk().destroy()
+    except Exception:
+        return False
+    return True
 
 
 needs_display = pytest.mark.skipif(not _display(), reason="constructing Tk widgets needs a display")

@@ -2,11 +2,22 @@
 """Download redistributable model files from their upstream hosts."""
 
 import argparse
-import os
 import urllib.request
-from pathlib import Path
 
 from huggingface_hub import snapshot_download
+
+# The data directory is resolved by the package rather than recomputed here, so
+# that this script cannot disagree with the programs about where the models
+# live. It matters more than it looks: an installation predating the rename
+# keeps everything under the old directory name, and the resolver picks the old
+# one only while the new one does not exist. Creating the new directory here
+# would therefore not just download to the wrong place — it would make the
+# existing models, settings and semantic index appear to have vanished.
+#
+# Both callers (install.sh and intel-npu-tools-setup) pip-install the package
+# into the virtual environment before running this, and config imports nothing
+# beyond the standard library, so the import is both safe and cheap.
+from intel_npu_tools.config import DATA_DIR
 
 
 parser = argparse.ArgumentParser(description=__doc__)
@@ -22,8 +33,7 @@ parser.add_argument(
 )
 arguments = parser.parse_args()
 
-data = Path(os.environ.get("INTEL_NPU_TOOLS_HOME", Path.home() / ".local/share/intel-npu-tools")).expanduser()
-models = data / "models"
+models = DATA_DIR / "models"
 models.mkdir(parents=True, exist_ok=True)
 
 print("Downloading OpenVINO Whisper Base INT8…")

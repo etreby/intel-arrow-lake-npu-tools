@@ -12,7 +12,16 @@ set -euo pipefail
 
 PROJECT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)"
 OUTPUT="${1:-$PROJECT_DIR/docs/images}"
-DATA_DIR="${INTEL_NPU_TOOLS_HOME:-$HOME/.local/share/intel-npu-tools}"
+DATA_DIR="${INTEL_NPU_TOOLS_HOME:-}"
+if [ -z "$DATA_DIR" ]; then
+  # An installation predating the rename keeps its virtual environment under
+  # the old directory name; use whichever is actually there, as the installer
+  # and the runtime do.
+  DATA_DIR="$HOME/.local/share/intel-npu-tools"
+  if [ ! -e "$DATA_DIR" ] && [ -e "$HOME/.local/share/intel-arrow-lake-npu-tools" ]; then
+    DATA_DIR="$HOME/.local/share/intel-arrow-lake-npu-tools"
+  fi
+fi
 VENV="$DATA_DIR/venv"
 # The panel asks for 940x680; matching the screen to it avoids a dead border.
 WIDTH=940

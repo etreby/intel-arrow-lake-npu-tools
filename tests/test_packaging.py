@@ -64,3 +64,38 @@ def test_every_shipped_command_has_a_wrapper_and_an_entry_point():
     pyproject = (ROOT / "pyproject.toml").read_text(encoding="utf-8")
     scripts = set(re.findall(r"^(intel-npu-[\w-]+) = ", pyproject, re.M))
     assert commands == scripts
+
+
+# Every one of these resolves the data directory for itself, because a shell
+# script cannot import config.py. The duplication is tolerable only while the
+# copies agree: an installation predating the rename keeps well over a gigabyte
+# of models under the old name, and the resolver prefers the old directory only
+# while the new one does not exist. A copy that creates or assumes the new path
+# therefore does not merely look in the wrong place — it makes an existing
+# installation's models, settings and semantic index appear to have vanished.
+LEGACY_AWARE = [
+    ROOT / "install.sh",
+    ROOT / "uninstall.sh",
+    ROOT / "packaging" / "intel-npu-tools-setup",
+    ROOT / "packaging" / "wrapper.in",
+    ROOT / "scripts" / "capture-screenshots.sh",
+]
+
+
+@pytest.mark.parametrize("path", LEGACY_AWARE, ids=lambda p: p.name)
+def test_shell_scripts_fall_back_to_the_legacy_data_directory(path):
+    text = path.read_text(encoding="utf-8")
+    assert ".local/share/intel-npu-tools" in text
+    assert ".local/share/intel-arrow-lake-npu-tools" in text
+
+
+def test_the_downloader_asks_the_package_where_the_data_lives():
+    """Python can import the resolver, so it must not hand-roll the path.
+
+    Recomputing it here was a real bug: running the documented
+    `download-models.py --with-reranker` on an installation predating the
+    rename created the new directory and orphaned the old one.
+    """
+    text = (ROOT / "scripts" / "download-models.py").read_text(encoding="utf-8")
+    assert "from intel_npu_tools.config import DATA_DIR" in text
+    assert ".local/share" not in text
