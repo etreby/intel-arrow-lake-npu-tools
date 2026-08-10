@@ -38,8 +38,21 @@ length of one job and never writes it anywhere.
 
 ```bash
 gpg --armor --export-secret-keys <KEY_ID> | gh secret set APT_GPG_PRIVATE_KEY
-# Only if the key has a passphrase:
-gh secret set APT_GPG_PASSPHRASE
+```
+
+**If the key has a passphrase, `APT_GPG_PASSPHRASE` is not optional.** Signing
+runs unattended, so a protected key with no passphrase available fails with:
+
+```
+gpg: Sorry, we are in batchmode - can't get input
+```
+
+That message is the whole diagnosis: the key imported fine and gpg is asking
+for something nothing can answer. Add it, or export a key with no passphrase
+for continuous integration and keep the protected one offline.
+
+```bash
+gh secret set APT_GPG_PASSPHRASE    # prompts; nothing is echoed or stored locally
 ```
 
 **Enable GitHub Pages** for the repository, with "GitHub Actions" as the
