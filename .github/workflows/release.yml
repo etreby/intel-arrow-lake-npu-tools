@@ -70,15 +70,29 @@ jobs:
             dist/*.tar.gz
             dist/*.deb
 
-      - name: Create the release
+      - name: Create or update the release
         if: github.ref_type == 'tag'
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          gh release create "$GITHUB_REF_NAME" \
-            --title "Intel NPU Tools ${{ steps.version.outputs.version }}" \
-            --notes-file <(awk '/^## /{n++} n==1' CHANGELOG.md) \
-            dist/*.whl dist/*.tar.gz dist/*.deb
+          # Idempotent on purpose. Re-running a release is ordinary — a secret
+          # was missing, a later job failed, an asset needs replacing — and
+          # `gh release create` fails outright when the release already exists,
+          # which previously took the whole job down and skipped everything
+          # downstream of it.
+          notes="$(awk '/^## /{n++} n==1' CHANGELOG.md)"
+          if gh release view "$GITHUB_REF_NAME" >/dev/null 2>&1; then
+            gh release edit "$GITHUB_REF_NAME" \
+              --title "Intel NPU Tools ${{ steps.version.outputs.version }}" \
+              --notes "$notes"
+            gh release upload "$GITHUB_REF_NAME" \
+              dist/*.whl dist/*.tar.gz dist/*.deb --clobber
+          else
+            gh release create "$GITHUB_REF_NAME" \
+              --title "Intel NPU Tools ${{ steps.version.outputs.version }}" \
+              --notes "$notes" \
+              dist/*.whl dist/*.tar.gz dist/*.deb
+          fi
 
   apt:
     name: Publish the signed apt repository
