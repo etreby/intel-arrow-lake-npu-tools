@@ -63,8 +63,19 @@ apt-ftparchive \
 # Both forms: InRelease is the inline-signed file modern apt prefers, and
 # Release.gpg is the detached signature older clients look for.
 rm -f InRelease Release.gpg
-gpg --batch --yes --default-key "$KEY_ID" --clearsign -o InRelease Release
-gpg --batch --yes --default-key "$KEY_ID" -abs -o Release.gpg Release
+
+# Loopback pinentry unconditionally. Without it gpg tries to open an
+# interactive prompt and fails with "Inappropriate ioctl for device" on any
+# machine with no terminal — a CI runner, a cron job — even when the key has no
+# passphrase at all and there is nothing to ask for.
+sign() {
+  gpg --batch --yes --pinentry-mode loopback \
+      ${APT_GPG_PASSPHRASE:+--passphrase "$APT_GPG_PASSPHRASE"} \
+      --default-key "$KEY_ID" "$@"
+}
+
+sign --clearsign -o InRelease Release
+sign -abs -o Release.gpg Release
 
 # The public key, in the dearmored form apt expects under
 # /etc/apt/keyrings, so a user never has to run gpg themselves.

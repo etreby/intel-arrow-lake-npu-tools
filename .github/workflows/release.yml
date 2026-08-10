@@ -125,16 +125,17 @@ jobs:
           sudo apt-get update || true
           sudo apt-get install -y apt-utils gnupg
           printf '%s' "$PRIVATE_KEY" | gpg --batch --import
-          # A passphrase-protected key cannot sign unattended without this.
-          if [ -n "$PASSPHRASE" ]; then
-            echo "allow-loopback-pinentry" >> ~/.gnupg/gpg-agent.conf
-            echo "pinentry-mode loopback" >> ~/.gnupg/gpg.conf
-            echo "passphrase $PASSPHRASE" >> ~/.gnupg/gpg.conf
-          fi
+          # Configured whether or not there is a passphrase: gpg opens a
+          # pinentry regardless and fails on a runner with no terminal.
+          mkdir -p ~/.gnupg && chmod 700 ~/.gnupg
+          echo "allow-loopback-pinentry" >> ~/.gnupg/gpg-agent.conf
+          gpgconf --kill gpg-agent || true
           echo "available=true" >> "$GITHUB_OUTPUT"
 
       - name: Build the repository
         if: steps.key.outputs.available == 'true'
+        env:
+          APT_GPG_PASSPHRASE: ${{ secrets.APT_GPG_PASSPHRASE }}
         run: |
           ./scripts/build-apt-repo.sh public/apt dist/*.deb
           # A landing page, so the Pages URL is not a bare directory listing.
