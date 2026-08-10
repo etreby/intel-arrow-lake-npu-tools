@@ -70,10 +70,10 @@ repository signed by a key it does not know.
 ## What users then run
 
 ```bash
-curl -fsSL https://etreby.github.io/intel-arrow-lake-npu-tools/apt/intel-npu-tools-archive-keyring.gpg \
+curl -fsSL https://etreby.github.io/intel-npu-tools/apt/intel-npu-tools-archive-keyring.gpg \
   | sudo tee /etc/apt/keyrings/intel-npu-tools.gpg > /dev/null
 
-echo "deb [signed-by=/etc/apt/keyrings/intel-npu-tools.gpg] https://etreby.github.io/intel-arrow-lake-npu-tools/apt ./" \
+echo "deb [signed-by=/etc/apt/keyrings/intel-npu-tools.gpg] https://etreby.github.io/intel-npu-tools/apt ./" \
   | sudo tee /etc/apt/sources.list.d/intel-npu-tools.list
 
 sudo apt update && sudo apt install intel-npu-tools

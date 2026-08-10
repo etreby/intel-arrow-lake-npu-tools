@@ -41,7 +41,7 @@ A directory containing model weights (`.bin`, `.gguf`, `.onnx`, `.pt`, `.pth`, `
 
 When a run finds nothing eligible, the result carries a `warning` field naming the supported suffixes and exclusions rather than silently reporting zero files.
 
-The SQLite database is stored at `~/.local/share/intel-arrow-lake-npu-tools/semantic-index.sqlite3`. Only index directories you intend an AI agent to search. Indexed chunks persist locally until the database or toolkit data directory is removed.
+The SQLite database is stored at `~/.local/share/intel-npu-tools/semantic-index.sqlite3`. Only index directories you intend an AI agent to search. Indexed chunks persist locally until the database or toolkit data directory is removed.
 
 ## Measured reference performance
 

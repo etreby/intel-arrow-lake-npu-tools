@@ -20,9 +20,31 @@ from pathlib import Path
 # under the data directory. Putting the resolution at the bottom of the stack
 # keeps that a straight line instead of a cycle; paths.py re-exports DATA_DIR,
 # so nothing else has to know it moved.
-DATA_DIR = Path(
-    os.environ.get("INTEL_NPU_TOOLS_HOME", Path.home() / ".local/share/intel-arrow-lake-npu-tools")
-).expanduser()
+LEGACY_DIRECTORY_NAME = "intel-arrow-lake-npu-tools"
+DIRECTORY_NAME = "intel-npu-tools"
+
+
+def _data_directory() -> Path:
+    """Where models, the index and settings live.
+
+    The project was renamed from intel-arrow-lake-npu-tools, and an existing
+    installation has well over a gigabyte of models under the old path. Moving
+    that automatically is not this function's business — a directory rename at
+    import time is not something a library should do to a user without asking —
+    so the old location is simply used when it is the one that exists. New
+    installations get the new name and nothing has to be migrated at all.
+    """
+    override = os.environ.get("INTEL_NPU_TOOLS_HOME", "").strip()
+    if override:
+        return Path(override).expanduser()
+    share = Path.home() / ".local/share"
+    current, legacy = share / DIRECTORY_NAME, share / LEGACY_DIRECTORY_NAME
+    if not current.exists() and legacy.exists():
+        return legacy
+    return current
+
+
+DATA_DIR = _data_directory()
 
 SETTINGS_FILE = DATA_DIR / "settings.json"
 

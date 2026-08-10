@@ -13,8 +13,8 @@ Contributions are welcome. Useful areas include additional Intel NPU generations
 ## Development setup
 
 ```bash
-git clone https://github.com/etreby/intel-arrow-lake-npu-tools.git
-cd intel-arrow-lake-npu-tools
+git clone https://github.com/etreby/intel-npu-tools.git
+cd intel-npu-tools
 python3 -m venv .venv
 source .venv/bin/activate
 pip install -e .

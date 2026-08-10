@@ -103,3 +103,33 @@ def test_a_stored_whisper_name_cannot_escape_the_model_directory(value):
     assert name not in ("", ".", "..") and paths.os.sep not in name
     assert resolved.parent == paths.MODEL_DIR
     assert ".." not in resolved.parts
+
+
+def test_a_fresh_machine_uses_the_new_directory_name(monkeypatch, tmp_path):
+    monkeypatch.delenv("INTEL_NPU_TOOLS_HOME", raising=False)
+    monkeypatch.setattr(config.Path, "home", staticmethod(lambda: tmp_path))
+    assert config._data_directory().name == config.DIRECTORY_NAME
+
+
+def test_an_existing_installation_keeps_its_old_directory(monkeypatch, tmp_path):
+    """The project was renamed; orphaning a gigabyte of models is not acceptable."""
+    monkeypatch.delenv("INTEL_NPU_TOOLS_HOME", raising=False)
+    legacy = tmp_path / ".local/share" / config.LEGACY_DIRECTORY_NAME
+    (legacy / "models").mkdir(parents=True)
+    monkeypatch.setattr(config.Path, "home", staticmethod(lambda: tmp_path))
+    assert config._data_directory() == legacy
+
+
+def test_the_new_directory_wins_once_it_exists(monkeypatch, tmp_path):
+    """After a real migration both may exist; the new one is authoritative."""
+    monkeypatch.delenv("INTEL_NPU_TOOLS_HOME", raising=False)
+    share = tmp_path / ".local/share"
+    (share / config.LEGACY_DIRECTORY_NAME).mkdir(parents=True)
+    (share / config.DIRECTORY_NAME).mkdir(parents=True)
+    monkeypatch.setattr(config.Path, "home", staticmethod(lambda: tmp_path))
+    assert config._data_directory() == share / config.DIRECTORY_NAME
+
+
+def test_the_environment_override_beats_both(monkeypatch, tmp_path):
+    monkeypatch.setenv("INTEL_NPU_TOOLS_HOME", str(tmp_path / "elsewhere"))
+    assert config._data_directory() == tmp_path / "elsewhere"

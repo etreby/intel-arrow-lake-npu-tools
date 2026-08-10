@@ -12,7 +12,7 @@ from .semantic import SemanticIndex
 
 
 mcp = MCPServer(
-    "intel-arrow-lake-npu-tools",
+    "intel-npu-tools",
     title="Intel Arrow Lake NPU Tools",
     description="Private local speech, OCR, and semantic search using Intel AI Boost.",
 )

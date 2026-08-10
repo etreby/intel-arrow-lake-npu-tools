@@ -1,9 +1,9 @@
-# Intel Arrow Lake NPU Tools for Linux
+# Intel NPU Tools for Linux
 
 An unofficial, community-maintained toolkit that makes the integrated **Intel AI Boost NPU** in Arrow Lake processors useful on Linux. It provides private semantic search, local speech transcription, screenshot OCR, hardware verification, and twelve MCP tools that AI agents can call.
 
-[![Validate](https://github.com/etreby/intel-arrow-lake-npu-tools/actions/workflows/validate.yml/badge.svg)](https://github.com/etreby/intel-arrow-lake-npu-tools/actions/workflows/validate.yml)
-[![Release](https://img.shields.io/github/v/release/etreby/intel-arrow-lake-npu-tools)](https://github.com/etreby/intel-arrow-lake-npu-tools/releases)
+[![Validate](https://github.com/etreby/intel-npu-tools/actions/workflows/validate.yml/badge.svg)](https://github.com/etreby/intel-npu-tools/actions/workflows/validate.yml)
+[![Release](https://img.shields.io/github/v/release/etreby/intel-npu-tools)](https://github.com/etreby/intel-npu-tools/releases)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 
 > This project is not affiliated with, sponsored by, or endorsed by Intel Corporation. Intel, Intel Core, OpenVINO, and Intel AI Boost are trademarks of their respective owners.
@@ -87,8 +87,8 @@ intel-npu-tools-setup            # add --with-reranker and --with-whisper-small 
 ## Quick installation
 
 ```bash
-git clone https://github.com/etreby/intel-arrow-lake-npu-tools.git
-cd intel-arrow-lake-npu-tools
+git clone https://github.com/etreby/intel-npu-tools.git
+cd intel-npu-tools
 ./install.sh --with-driver
 ```
 

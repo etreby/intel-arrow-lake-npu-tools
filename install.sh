@@ -2,7 +2,23 @@
 set -euo pipefail
 
 PROJECT_DIR=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)
-DATA_DIR="${INTEL_NPU_TOOLS_HOME:-$HOME/.local/share/intel-arrow-lake-npu-tools}"
+# The project was renamed; an existing installation keeps its data under the
+# old directory name. Use whichever exists so a rename never orphans a
+# gigabyte of models, and prefer the new name for a fresh install.
+default_data_dir() {
+  if [ -n "${INTEL_NPU_TOOLS_HOME:-}" ]; then
+    printf '%s' "$INTEL_NPU_TOOLS_HOME"
+    return
+  fi
+  if [ ! -e "$HOME/.local/share/intel-npu-tools" ] \
+     && [ -e "$HOME/.local/share/intel-arrow-lake-npu-tools" ]; then
+    printf '%s' "$HOME/.local/share/intel-arrow-lake-npu-tools"
+  else
+    printf '%s' "$HOME/.local/share/intel-npu-tools"
+  fi
+}
+
+DATA_DIR="$(default_data_dir)"
 VENV="$DATA_DIR/venv"
 WITH_DRIVER=false
 WITH_MCP=true

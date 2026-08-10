@@ -32,7 +32,7 @@ Installed-Size: $INSTALLED_SIZE
 Depends: python3 (>= 3.10), python3-venv, ffmpeg, tesseract-ocr, tesseract-ocr-eng, pciutils
 Recommends: tesseract-ocr-ara, wl-clipboard, pipewire-bin, librsvg2-bin
 Suggests: kde-spectacle | gnome-screenshot | grim, xclip
-Homepage: https://github.com/etreby/intel-arrow-lake-npu-tools
+Homepage: https://github.com/etreby/intel-npu-tools
 Description: Local speech, OCR and semantic search on the Intel NPU
  Makes the integrated Intel AI Boost NPU in Arrow Lake processors useful on
  Linux. Provides private semantic search, local Whisper transcription,

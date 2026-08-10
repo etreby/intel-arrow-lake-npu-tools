@@ -28,7 +28,7 @@ Release:        1%{?dist}
 Summary:        Local speech, OCR and semantic search on the Intel AI Boost NPU
 
 License:        MIT
-URL:            https://github.com/etreby/intel-arrow-lake-npu-tools
+URL:            https://github.com/etreby/intel-npu-tools
 BuildArch:      noarch
 
 # Dependency names differ between the RPM distributions, so they are selected

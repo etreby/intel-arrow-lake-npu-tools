@@ -22,7 +22,7 @@ parser.add_argument(
 )
 arguments = parser.parse_args()
 
-data = Path(os.environ.get("INTEL_NPU_TOOLS_HOME", Path.home() / ".local/share/intel-arrow-lake-npu-tools")).expanduser()
+data = Path(os.environ.get("INTEL_NPU_TOOLS_HOME", Path.home() / ".local/share/intel-npu-tools")).expanduser()
 models = data / "models"
 models.mkdir(parents=True, exist_ok=True)
 
