@@ -14,3 +14,7 @@ speech-history.txt
 dist/
 build/
 *.egg-info/
+rpmbuild/
+archpkg/
+archsrc/
+public/

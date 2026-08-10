@@ -14,16 +14,23 @@ PROGRAM="$DATA_DIR/venv/bin/@COMMAND@"
 if [[ ! -x "$PROGRAM" ]]; then
   message="Intel NPU Tools is installed but not yet set up for this user.
 Run: intel-npu-tools-setup"
-  # Graphical launches have no terminal to print to, so say it in a dialog when
-  # one of the usual ones is available and fall back to stderr otherwise.
-  if [[ ! -t 2 ]]; then
+
+  # Always say it on stderr. An earlier version only did so when stderr was a
+  # terminal and otherwise opened a dialog, which meant that piping the output
+  # of a command — entirely normal in a script — popped a window on the user's
+  # desktop and printed nothing at all.
+  echo "$message" >&2
+
+  # A launch from a desktop menu has nowhere to print, so additionally show a
+  # dialog when there is a display and no terminal on either stream. Failure to
+  # do so is ignored: the message has already been delivered.
+  if [[ ! -t 1 && ! -t 2 && ( -n "${WAYLAND_DISPLAY:-}" || -n "${DISPLAY:-}" ) ]]; then
     if command -v kdialog >/dev/null; then
-      kdialog --error "$message" 2>/dev/null && exit 1
+      kdialog --error "$message" >/dev/null 2>&1 || true
     elif command -v zenity >/dev/null; then
-      zenity --error --no-wrap --text="$message" 2>/dev/null && exit 1
+      zenity --error --no-wrap --text="$message" >/dev/null 2>&1 || true
     fi
   fi
-  echo "$message" >&2
   exit 1
 fi
 

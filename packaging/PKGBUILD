@@ -7,8 +7,15 @@
 # they are redistributed under their own licences, and OpenVINO is not in the
 # Arch repositories. Each user runs intel-npu-tools-setup once.
 #
-# Not yet built: authored on a Debian derivative with no makepkg available.
-# The file is syntax-checked only. Build it before relying on it.
+# Builds from the working tree rather than a release tarball, which is what
+# makes `makepkg -si` work on a local checkout. That also means it is not in a
+# shape the AUR accepts: an AUR package must fetch a versioned source from a
+# URL and check it against a sha256sum, so publishing there needs a source=()
+# entry pointing at the release tarball.
+#
+# The package() function below has been exercised directly with makepkg's
+# variables (startdir, pkgdir) and produces the expected tree, but no full
+# `makepkg` run has happened — this was authored on a Debian derivative.
 #
 # Build with: makepkg -si
 pkgname=intel-npu-tools

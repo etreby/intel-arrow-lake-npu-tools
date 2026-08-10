@@ -1,11 +1,11 @@
 # RPM package.
 #
-# Not yet built anywhere: this was authored on a Debian derivative with no
-# rpmbuild available, so only the .deb has actually been produced and unpacked.
-# The Fedora dependency names are the ones to trust first; the openSUSE names
-# are selected by an %if below and come from that distribution's package list
-# rather than from a build. Enterprise Linux additionally needs EPEL for
-# ffmpeg-free and tesseract. Build it before relying on it.
+# Built with rpmbuild 4.18 and inspected; the resulting noarch package carries
+# the expected 53 files and no build warnings. It has not been *installed* on a
+# Fedora system, so the dependency names remain the part to check first: the
+# openSUSE names are selected by an %if below and come from that distribution's
+# package list rather than from a resolved install, and Enterprise Linux needs
+# EPEL for ffmpeg-free and tesseract.
 #
 # Installs the same tree as the Debian and Arch packages by calling the shared
 # staging script, so the three cannot drift apart.
@@ -81,7 +81,11 @@ as your own user to create the environment and download them.
 %{project}/scripts/stage-package.sh %{buildroot} %{_prefix}
 
 %files
-%license %{_prefix}/lib/intel-npu-tools/LICENSE
+# LICENSE is not marked as a license file here: it sits inside the lib
+# directory this package already owns wholesale, and naming it again makes
+# rpmbuild report the file twice. A copy is installed under the doc directory
+# below. Note that rpm expands macros inside comments too, so this deliberately
+# spells out paths in words rather than using them.
 %doc %{_datadir}/doc/intel-npu-tools
 %{_bindir}/intel-npu-info
 %{_bindir}/intel-npu-mcp
@@ -120,7 +124,7 @@ fi
 /usr/bin/update-desktop-database &>/dev/null || :
 
 %changelog
-* Sat Aug 09 2026 Mohamed El-Etreby <40498+etreby@users.noreply.github.com> - 0.3.0-1
+* Sun Aug 09 2026 Mohamed El-Etreby <40498+etreby@users.noreply.github.com> - 0.3.0-1
 - Control panel, persistent settings, and desktop support beyond KDE
 - context_filter and screen_to_text for reducing AI agent token use
 - Optional cross-encoder reranking and a selectable speech model

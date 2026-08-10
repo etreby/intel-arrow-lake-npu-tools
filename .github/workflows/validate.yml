@@ -36,6 +36,25 @@ jobs:
           done
           # Models and build residue must never end up in a package.
           ! find /tmp/debcheck \( -name '*.bin' -o -name '__pycache__' -o -name '*.egg-info' \) | grep -q .
+      - name: Build the RPM and exercise the PKGBUILD
+        run: |
+          # rpmbuild runs on Debian, so the spec is checked on every push rather
+          # than only when someone happens to have a Fedora machine. The
+          # PKGBUILD cannot be built without makepkg, but its package()
+          # function is the part that installs files, so it is run directly
+          # with the variables makepkg would set.
+          sudo apt-get install -y rpm
+          rpmbuild -bb packaging/intel-npu-tools.spec \
+            --define "_topdir $PWD/rpmbuild" --define "_projectdir $PWD" 2>&1 | tee /tmp/rpm.log
+          # rpmbuild exits 0 on warnings, so they are failed explicitly.
+          ! sed -n '/RPM build warnings/,$p' /tmp/rpm.log | grep -q '[^[:space:]]' \
+            || { sed -n '/RPM build warnings/,$p' /tmp/rpm.log; exit 1; }
+          rpm -qlp rpmbuild/RPMS/noarch/*.rpm | grep -q '/usr/bin/intel-npu-panel'
+          ( set -e
+            startdir="$PWD/packaging"; pkgdir="$PWD/archpkg"; srcdir="$PWD/archsrc"
+            mkdir -p "$srcdir"; cd packaging; source ./PKGBUILD; package )
+          test -x archpkg/usr/bin/intel-npu-panel
+          test -f archpkg/usr/share/licenses/intel-npu-tools/LICENSE
       - name: Validate shell
         run: |
           bash -n install.sh uninstall.sh scripts/*.sh packaging/intel-npu-tools-setup
