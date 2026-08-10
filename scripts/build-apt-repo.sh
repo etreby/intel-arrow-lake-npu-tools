@@ -18,6 +18,16 @@ set -euo pipefail
 
 OUTPUT="${1:?usage: build-apt-repo.sh <output-dir> <deb> [deb...]}"
 shift
+# Resolved before anything else, because this cd's into the output directory
+# and a relative path stops meaning the same thing the moment it does. The
+# .deb paths get the same treatment for the same reason.
+mkdir -p "$OUTPUT"
+OUTPUT="$(cd "$OUTPUT" && pwd)"
+PACKAGES=()
+for package in "$@"; do
+  PACKAGES+=("$(cd "$(dirname "$package")" && pwd)/$(basename "$package")")
+done
+set -- "${PACKAGES[@]+"${PACKAGES[@]}"}"
 if [[ $# -eq 0 ]]; then
   echo "No .deb files given." >&2
   exit 2
