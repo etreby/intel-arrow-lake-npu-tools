@@ -1,11 +1,13 @@
 # RPM package.
 #
-# Built with rpmbuild 4.18 and inspected; the resulting noarch package carries
-# the expected 53 files and no build warnings. It has not been *installed* on a
-# Fedora system, so the dependency names remain the part to check first: the
-# openSUSE names are selected by an %if below and come from that distribution's
-# package list rather than from a resolved install, and Enterprise Linux needs
-# EPEL for ffmpeg-free and tesseract.
+# Built and installed on both Fedora and openSUSE Tumbleweed on every push, in
+# containers, by the install-fedora and install-opensuse jobs. Each builds the
+# spec on the distribution it targets — which is the only way the %if below is
+# evaluated both ways — installs the result, checks that every dependency name
+# it declares resolves there, and checks the installed tree.
+#
+# Enterprise Linux is still unverified: it needs EPEL for ffmpeg-free and
+# tesseract, and nothing here has been run against it.
 #
 # Installs the same tree as the Debian and Arch packages by calling the shared
 # staging script, so the three cannot drift apart.
@@ -35,8 +37,14 @@ BuildArch:      noarch
 # rather than assumed. Fedora's names are not openSUSE's: ffmpeg-free,
 # tesseract-langpack-eng and librsvg2-tools simply do not exist there, and a
 # spec that names them fails to install on a distribution it claims to support.
-# Only the Fedora path has been built and installed; the openSUSE names come
-# from that distribution's package list and are unverified.
+# Both sets are now checked by name on the distribution they are for, which is
+# what caught tesseract-ocr-traineddata-arabic: openSUSE names its language
+# data by the three-letter code, and a Recommends that matches nothing is
+# dropped in silence, so Arabic recognition would simply never have worked.
+#
+# ffmpeg and python3 are deliberately unversioned virtual names. openSUSE has
+# no package called either, and requiring ffmpeg-7 or python311 instead would
+# break at the next major version.
 Requires:       python3 >= 3.10
 Requires:       pciutils
 
@@ -44,7 +52,7 @@ Requires:       pciutils
 Requires:       ffmpeg
 Requires:       tesseract-ocr
 Requires:       tesseract-ocr-traineddata-english
-Recommends:     tesseract-ocr-traineddata-arabic
+Recommends:     tesseract-ocr-traineddata-ara
 Recommends:     pipewire-tools
 Recommends:     rsvg-convert
 %else

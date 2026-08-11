@@ -13,9 +13,11 @@
 # URL and check it against a sha256sum, so publishing there needs a source=()
 # entry pointing at the release tarball.
 #
-# The package() function below has been exercised directly with makepkg's
-# variables (startdir, pkgdir) and produces the expected tree, but no full
-# `makepkg` run has happened — this was authored on a Debian derivative.
+# Built with a real `makepkg -s` in an Arch container and installed with
+# `pacman -U` on every push, by the install-arch job. That also proves every
+# name in depends() exists, since -s installs them; the optdepends are checked
+# separately, because pacman never installs those and would not notice a name
+# that means nothing.
 #
 # Build with: makepkg -si
 pkgname=intel-npu-tools

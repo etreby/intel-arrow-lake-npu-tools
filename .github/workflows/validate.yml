@@ -36,25 +36,18 @@ jobs:
           done
           # Models and build residue must never end up in a package.
           ! find /tmp/debcheck \( -name '*.bin' -o -name '__pycache__' -o -name '*.egg-info' \) | grep -q .
-      - name: Build the RPM and exercise the PKGBUILD
+      - name: Fail the RPM build on warnings
         run: |
-          # rpmbuild runs on Debian, so the spec is checked on every push rather
-          # than only when someone happens to have a Fedora machine. The
-          # PKGBUILD cannot be built without makepkg, but its package()
-          # function is the part that installs files, so it is run directly
-          # with the variables makepkg would set.
+          # The install-fedora and install-opensuse jobs below build this spec
+          # for real, on the distributions it targets, so this is no longer
+          # where the spec is proven to work. What it still does that they do
+          # not is refuse a build that only warns: rpmbuild exits 0 on
+          # warnings, and a warning is how an unpackaged file announces itself.
           sudo apt-get install -y rpm
           rpmbuild -bb packaging/intel-npu-tools.spec \
             --define "_topdir $PWD/rpmbuild" --define "_projectdir $PWD" 2>&1 | tee /tmp/rpm.log
-          # rpmbuild exits 0 on warnings, so they are failed explicitly.
           ! sed -n '/RPM build warnings/,$p' /tmp/rpm.log | grep -q '[^[:space:]]' \
             || { sed -n '/RPM build warnings/,$p' /tmp/rpm.log; exit 1; }
-          rpm -qlp rpmbuild/RPMS/noarch/*.rpm | grep -q '/usr/bin/intel-npu-panel'
-          ( set -e
-            startdir="$PWD/packaging"; pkgdir="$PWD/archpkg"; srcdir="$PWD/archsrc"
-            mkdir -p "$srcdir"; cd packaging; source ./PKGBUILD; package )
-          test -x archpkg/usr/bin/intel-npu-panel
-          test -f archpkg/usr/share/licenses/intel-npu-tools/LICENSE
       - name: Validate shell
         run: |
           bash -n install.sh uninstall.sh scripts/*.sh packaging/intel-npu-tools-setup
@@ -63,3 +56,119 @@ jobs:
         run: |
           python -m build
           python -m twine check dist/*.whl dist/*.tar.gz
+
+  # The three jobs below install the native packages on the distributions they
+  # are for. static-checks above builds the RPM on Debian, which proves the
+  # spec is syntactically sound but cannot prove a single dependency name is
+  # real — and the spec picks different names per distribution with an %if, so
+  # a Debian build never even evaluates the openSUSE branch. These do.
+  #
+  # None of them runs a wrapper or intel-npu-tools-setup: those bootstrap a
+  # virtual environment and download models, which is deliberately not what
+  # installing the package does.
+
+  install-fedora:
+    runs-on: ubuntu-24.04
+    container: fedora:latest
+    steps:
+      - name: Install the build and packaging tools
+        # git is what lets actions/checkout clone rather than fall back to the
+        # REST API; librsvg2-tools is needed at build time because the staging
+        # script rasterises the icon and silently ships only the SVG without it.
+        run: dnf install -y --setopt=install_weak_deps=False
+             git rpm-build librsvg2-tools desktop-file-utils
+      - name: Let the container install documentation
+        # The Fedora image sets tsflags=nodocs to stay small, which would drop
+        # the files this package installs under share/doc and make a correct
+        # package look incomplete.
+        run: |
+          if [ -f /etc/dnf/dnf.conf ]; then
+            sed -i '/^tsflags=/d' /etc/dnf/dnf.conf
+          fi
+      - uses: actions/checkout@v7
+      - name: Build the RPM on Fedora itself
+        run: |
+          rpmbuild -bb packaging/intel-npu-tools.spec \
+            --define "_topdir $PWD/rpmbuild" --define "_projectdir $PWD"
+      - name: Install it, which resolves every hard dependency
+        run: dnf install -y ./rpmbuild/RPMS/noarch/*.rpm
+      - name: Check every dependency name means something here
+        run: ./scripts/verify-package-deps.sh rpmbuild/RPMS/noarch/*.rpm
+      - name: Check what landed on the system
+        run: ./scripts/verify-installed-tree.sh
+      - name: Remove it again, and take away everything it owned
+        run: |
+          ./scripts/package-files.sh > /tmp/owned.txt
+          dnf remove -y intel-npu-tools
+          ./scripts/verify-removed-tree.sh /tmp/owned.txt
+
+  install-opensuse:
+    runs-on: ubuntu-24.04
+    container: opensuse/tumbleweed
+    steps:
+      - name: Install the build and packaging tools
+        run: zypper --non-interactive install --no-recommends
+             git rpm-build rsvg-convert desktop-file-utils tar gzip
+      - name: Let the container install documentation
+        # Same size optimisation as the Fedora image, and it lives in neither
+        # of the places it looks like it should.
+        # The vendor zypp.conf says nothing about documentation and no rpm
+        # macro does either: the image excludes it with a drop-in named
+        # excludedocs.conf. A drop-in in /etc shadows the one of the same name
+        # under /usr/etc, so this has to reuse that name rather than pick one
+        # that sorts after it — 9 sorts before e, and the image would win.
+        run: |
+          mkdir -p /etc/zypp/zypp.conf.d
+          printf '[main]\nrpm.install.excludedocs = no\n' \
+            > /etc/zypp/zypp.conf.d/excludedocs.conf
+          grep -rs excludedocs /etc/zypp/zypp.conf.d /usr/etc/zypp/zypp.conf.d || true
+      - uses: actions/checkout@v7
+      - name: Build the RPM on openSUSE itself
+        # This is the build that takes the suse_version branch of the spec, so
+        # it is the only one that produces the openSUSE dependency names.
+        run: |
+          rpmbuild -bb packaging/intel-npu-tools.spec \
+            --define "_topdir $PWD/rpmbuild" --define "_projectdir $PWD"
+      - name: Install it, which resolves every hard dependency
+        # Locally built, so it carries no signature.
+        run: zypper --non-interactive install --allow-unsigned-rpm ./rpmbuild/RPMS/noarch/*.rpm
+      - name: Check every dependency name means something here
+        run: ./scripts/verify-package-deps.sh rpmbuild/RPMS/noarch/*.rpm
+      - name: Check what landed on the system
+        run: ./scripts/verify-installed-tree.sh
+      - name: Remove it again, and take away everything it owned
+        run: |
+          ./scripts/package-files.sh > /tmp/owned.txt
+          zypper --non-interactive remove intel-npu-tools
+          ./scripts/verify-removed-tree.sh /tmp/owned.txt
+
+  install-arch:
+    runs-on: ubuntu-24.04
+    container: archlinux:latest
+    steps:
+      - name: Install the build and packaging tools
+        run: pacman -Syu --noconfirm --needed base-devel git librsvg desktop-file-utils sudo
+      - name: Let the container install documentation
+        # The Arch image lists share/doc under NoExtract for the same reason.
+        run: sed -i '/^NoExtract/d' /etc/pacman.conf
+      - uses: actions/checkout@v7
+      - name: Make an unprivileged user, because makepkg refuses to run as root
+        run: |
+          useradd -m builder
+          echo 'builder ALL=(ALL) NOPASSWD: ALL' > /etc/sudoers.d/builder
+          chown -R builder:builder "$GITHUB_WORKSPACE"
+      - name: Build the package with a real makepkg run
+        # -s installs the declared dependencies, so a name that does not exist
+        # in the Arch repositories fails here rather than at someone's install.
+        run: sudo -u builder bash -c 'cd packaging && makepkg -s --noconfirm'
+      - name: Install it
+        run: pacman -U --noconfirm packaging/*.pkg.tar.zst
+      - name: Check every dependency name means something here
+        run: ./scripts/verify-package-deps.sh packaging/*.pkg.tar.zst
+      - name: Check what landed on the system
+        run: ./scripts/verify-installed-tree.sh
+      - name: Remove it again, and take away everything it owned
+        run: |
+          ./scripts/package-files.sh > /tmp/owned.txt
+          pacman -R --noconfirm intel-npu-tools
+          ./scripts/verify-removed-tree.sh /tmp/owned.txt

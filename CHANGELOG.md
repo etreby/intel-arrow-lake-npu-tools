@@ -1,5 +1,16 @@
 # Changelog
 
+## Unreleased
+
+### Fixed
+
+- Arabic text recognition would never have worked on openSUSE. The RPM recommended `tesseract-ocr-traineddata-arabic`, and openSUSE names its language data by the three-letter code, so the correct name is `tesseract-ocr-traineddata-ara`. A weak dependency that matches nothing is not an error: zypper drops it in silence and reports a successful install, so the package looked correct and the feature was simply absent.
+
+### Changed
+
+- The RPM and Arch packages are now built and installed on the distributions they are for, in containers, on every push. Until now neither had ever been installed anywhere — they were built, inspected and believed. The RPM is built twice, on Fedora and on openSUSE Tumbleweed, because the spec selects dependency names with an `%if` and a build on one distribution never evaluates the other's branch. The Arch package gets a real `makepkg -s` run and a `pacman -U` install, in place of calling its `package()` function directly.
+- Dependency names are checked individually rather than being trusted to the install. Installing proves only that the required set resolves; a *weak* name that exists nowhere is skipped without comment by dnf, zypper and pacman alike, which is exactly how the Arabic package name survived. Names are read back out of the built package and matched against what the archive provides, so a virtual name like `ffmpeg` or `python3` — which openSUSE has no package called, and which is still the right thing to require there — passes, while a name nothing answers to fails.
+
 ## 0.3.0 - 2026-08-09
 
 ### Added
