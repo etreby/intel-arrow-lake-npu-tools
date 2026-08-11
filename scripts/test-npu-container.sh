@@ -122,11 +122,18 @@ if 'NPU' not in devices:
              '  and NPU_DRIVER_ASSET at build time.')
 print('  NPU:', core.get_property('NPU', 'FULL_DEVICE_NAME'))
 
-import openvino.runtime.opset13 as ops
+import numpy as np
+import openvino.opset13 as ops   # openvino.runtime was removed in 2026
 parameter = ops.parameter([1, 8], ov.Type.f32, name='input')
 model = ov.Model([ops.relu(parameter)], [parameter], 'smoke')
-core.compile_model(model, 'NPU')
-print('  compiled a model on the NPU — the passthrough is genuinely working')
+compiled = core.compile_model(model, 'NPU')
+# Compiling is not proof on its own — run it and check the arithmetic, so a
+# device that accepts work and returns nonsense cannot pass.
+result = compiled([np.array([[-1, 2, -3, 4, -5, 6, -7, 8]], dtype=np.float32)])[0]
+expected = np.array([[0, 2, 0, 4, 0, 6, 0, 8]], dtype=np.float32)
+if not np.array_equal(result, expected):
+    sys.exit(f'  the NPU ran the model and got it wrong: {result} instead of {expected}')
+print('  ran a model on the NPU and the arithmetic is right:', result.tolist()[0])
 "
 
 if ! $KEEP; then

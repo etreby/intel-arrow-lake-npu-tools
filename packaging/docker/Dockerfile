@@ -42,14 +42,20 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 # Intel's NPU userspace. There is no repository to add: these are release
 # assets, which is why they are fetched by URL and why the versions above are
 # the thing to change when this stops working.
+#
+# Not done in /tmp. apt drops privileges to the _apt user and needs a writable
+# /tmp to do it; unpacking a tarball there can leave that directory with
+# permissions apt cannot use, and the failure it then reports is about
+# repository signatures, which sends you looking in entirely the wrong place.
 RUN set -eux; \
-    cd /tmp; \
+    workdir=/opt/npu-driver; mkdir -p "$workdir"; cd "$workdir"; \
     curl -fsSLO "https://github.com/oneapi-src/level-zero/releases/download/${LEVEL_ZERO_TAG}/${LEVEL_ZERO_ASSET}"; \
     curl -fsSLO "https://github.com/intel/linux-npu-driver/releases/download/${NPU_DRIVER_TAG}/${NPU_DRIVER_ASSET}"; \
     tar xf "${NPU_DRIVER_ASSET}"; \
+    chmod 1777 /tmp; \
     apt-get update; \
-    apt-get install -y --no-install-recommends ./*.deb; \
-    rm -rf /var/lib/apt/lists/* /tmp/*.deb /tmp/*.tar.gz
+    apt-get install -y --no-install-recommends $(find "$workdir" -name '*.deb' | sort); \
+    cd /; rm -rf "$workdir" /var/lib/apt/lists/*
 
 # The toolkit itself, from the tree being built rather than from a release, so
 # that this image tests the code in front of you.
