@@ -34,8 +34,14 @@ jobs:
           for entry in /tmp/debcheck/usr/share/applications/*.desktop; do
             desktop-file-validate "$entry"
           done
-          # Models and build residue must never end up in a package.
-          ! find /tmp/debcheck \( -name '*.bin' -o -name '__pycache__' -o -name '*.egg-info' \) | grep -q .
+          # Models and build residue must never end up in a package. find's own
+          # failure counts as a failure: piping it into grep would turn an
+          # unreadable tree into an empty result, which reads as nothing found.
+          residue=$(find /tmp/debcheck \( -name '*.bin' -o -name '__pycache__' -o -name '*.egg-info' \) -print)
+          if [ -n "$residue" ]; then
+            printf 'packaged residue:\n%s\n' "$residue"
+            exit 1
+          fi
       - name: Fail the RPM build on warnings
         run: |
           # The install-fedora and install-opensuse jobs below build this spec
@@ -44,10 +50,21 @@ jobs:
           # not is refuse a build that only warns: rpmbuild exits 0 on
           # warnings, and a warning is how an unpackaged file announces itself.
           sudo apt-get install -y rpm
-          rpmbuild -bb packaging/intel-npu-tools.spec \
+          # Without pipefail a failing rpmbuild is hidden by tee's success, and
+          # a build that produced no RPM at all also emits no warning section,
+          # so the check below would find nothing wrong and pass.
+          set -o pipefail
+          # --nodeps because rpm's database on a Debian runner is empty, so no
+          # BuildRequires can ever be satisfied here however correct it is.
+          # The three container jobs build the same spec with the check live,
+          # which is where a wrong build dependency actually gets caught.
+          rpmbuild -bb --nodeps packaging/intel-npu-tools.spec \
             --define "_topdir $PWD/rpmbuild" --define "_projectdir $PWD" 2>&1 | tee /tmp/rpm.log
-          ! sed -n '/RPM build warnings/,$p' /tmp/rpm.log | grep -q '[^[:space:]]' \
-            || { sed -n '/RPM build warnings/,$p' /tmp/rpm.log; exit 1; }
+          warnings=$(sed -n '/RPM build warnings/,$p' /tmp/rpm.log)
+          if printf '%s' "$warnings" | grep -q '[^[:space:]]'; then
+            printf '%s\n' "$warnings"
+            exit 1
+          fi
       - name: Check the AUR PKGBUILD has not drifted
         # It is generated from packaging/PKGBUILD so the two cannot end up
         # disagreeing about dependencies. This only compares metadata, so it
@@ -96,7 +113,7 @@ jobs:
         run: ./scripts/verify-installed-tree.sh
       - name: Remove it again, and take away everything it owned
         run: |
-          ./scripts/package-files.sh > /tmp/owned.txt
+          ./scripts/package-files.sh --with-state > /tmp/owned.txt
           apt-get remove -y intel-npu-tools
           ./scripts/verify-removed-tree.sh /tmp/owned.txt
 
@@ -131,7 +148,7 @@ jobs:
         run: ./scripts/verify-installed-tree.sh
       - name: Remove it again, and take away everything it owned
         run: |
-          ./scripts/package-files.sh > /tmp/owned.txt
+          ./scripts/package-files.sh --with-state > /tmp/owned.txt
           dnf remove -y intel-npu-tools
           ./scripts/verify-removed-tree.sh /tmp/owned.txt
 
@@ -166,7 +183,7 @@ jobs:
         run: ./scripts/verify-installed-tree.sh
       - name: Remove it again, and take away everything it owned
         run: |
-          ./scripts/package-files.sh > /tmp/owned.txt
+          ./scripts/package-files.sh --with-state > /tmp/owned.txt
           dnf remove -y intel-npu-tools
           ./scripts/verify-removed-tree.sh /tmp/owned.txt
 
@@ -206,7 +223,7 @@ jobs:
         run: ./scripts/verify-installed-tree.sh
       - name: Remove it again, and take away everything it owned
         run: |
-          ./scripts/package-files.sh > /tmp/owned.txt
+          ./scripts/package-files.sh --with-state > /tmp/owned.txt
           zypper --non-interactive remove intel-npu-tools
           ./scripts/verify-removed-tree.sh /tmp/owned.txt
 
@@ -237,7 +254,7 @@ jobs:
         run: ./scripts/verify-installed-tree.sh
       - name: Remove it again, and take away everything it owned
         run: |
-          ./scripts/package-files.sh > /tmp/owned.txt
+          ./scripts/package-files.sh --with-state > /tmp/owned.txt
           pacman -R --noconfirm intel-npu-tools
           ./scripts/verify-removed-tree.sh /tmp/owned.txt
 
@@ -269,6 +286,6 @@ jobs:
         run: ./scripts/verify-installed-tree.sh
       - name: Remove it again, and take away everything it owned
         run: |
-          ./scripts/package-files.sh > /tmp/owned.txt
+          ./scripts/package-files.sh --with-state > /tmp/owned.txt
           pacman -R --noconfirm intel-npu-tools
           ./scripts/verify-removed-tree.sh /tmp/owned.txt

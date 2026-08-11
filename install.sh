@@ -83,7 +83,8 @@ update-desktop-database "$HOME/.local/share/applications" 2>/dev/null || true
 
 # The icon is referenced by name, so it has to exist in a theme the desktop
 # searches; without this the launcher shows a generic placeholder.
-"$PROJECT_DIR/scripts/render-icons.sh" "$HOME/.local/share/icons/hicolor"
+"$PROJECT_DIR/scripts/render-icons.sh" --allow-scalable-only \
+  "$HOME/.local/share/icons/hicolor"
 gtk-update-icon-cache -qtf "$HOME/.local/share/icons/hicolor" 2>/dev/null || true
 
 # Register the KDE global shortcuts.

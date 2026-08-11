@@ -51,7 +51,14 @@ elif command -v zypper >/dev/null; then
   suggest_similar() { zypper --non-interactive --quiet search --type package -- "$1" 2>/dev/null | awk -F'|' 'NF>2 && $2 !~ /Name/ {gsub(/ /,"",$2); print $2}'; }
   QUERY_FORMS="zypper"
 elif command -v pacman >/dev/null; then
-  package_exists() { pacman -Si -- "$1" >/dev/null 2>&1; }
+  package_exists() {
+    # -Si answers for a real package name only. A name that is merely provided
+    # by something needs -Sp, which resolves it exactly as an install would
+    # without installing anything. With several providers --noconfirm takes
+    # the first, which is enough to answer whether the name means anything.
+    pacman -Si -- "$1" >/dev/null 2>&1 && return 0
+    pacman -Sp --print-format '%n' --noconfirm -- "$1" >/dev/null 2>&1
+  }
   suggest_similar() { pacman -Ssq -- "^$1" 2>/dev/null; }
   QUERY_FORMS="pacman"
 elif command -v apt-cache >/dev/null; then

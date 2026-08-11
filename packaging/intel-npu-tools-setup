@@ -119,21 +119,39 @@ echo "Downloading models (about 800 MB on a first run)…"
 INTEL_NPU_TOOLS_HOME="$DATA_DIR" "$VENV/bin/python" "$LIBDIR/scripts/download-models.py" \
   ${DOWNLOAD_ARGUMENTS[@]+"${DOWNLOAD_ARGUMENTS[@]}"}
 
+MCP_FAILURES=()
 if $WITH_MCP; then
   MCP_COMMAND="/usr/bin/intel-npu-mcp"
+  # Each failure used to be discarded, and setup then announced itself
+  # complete — so a registration that did not happen looked exactly like one
+  # that did, and the tools simply never appeared in the agent. It is still
+  # not fatal, because everything else works without it, but it is said out
+  # loud at the end.
   if command -v codex >/dev/null && ! codex mcp get intel-npu-tools >/dev/null 2>&1; then
-    codex mcp add intel-npu-tools -- "$MCP_COMMAND" || true
+    codex mcp add intel-npu-tools -- "$MCP_COMMAND" || MCP_FAILURES+=("codex")
   fi
   if command -v claude >/dev/null && ! claude mcp get intel-npu-tools >/dev/null 2>&1; then
-    claude mcp add --scope user --transport stdio intel-npu-tools -- "$MCP_COMMAND" || true
+    claude mcp add --scope user --transport stdio intel-npu-tools -- "$MCP_COMMAND" \
+      || MCP_FAILURES+=("claude")
   fi
   if command -v gemini >/dev/null && ! gemini mcp list 2>/dev/null | grep -q intel-npu-tools; then
-    gemini mcp add --scope user intel-npu-tools "$MCP_COMMAND" || true
+    gemini mcp add --scope user intel-npu-tools "$MCP_COMMAND" || MCP_FAILURES+=("gemini")
   fi
 fi
 
 echo
 "$VENV/bin/intel-npu-info" || true
+
+if [ ${#MCP_FAILURES[@]} -gt 0 ]; then
+  cat >&2 <<EOF
+
+Could not register the MCP server with: ${MCP_FAILURES[*]}
+Everything else is set up. To retry one by hand, and see why it failed:
+
+    claude mcp add --scope user --transport stdio intel-npu-tools -- $MCP_COMMAND
+EOF
+fi
+
 cat <<EOF
 
 Setup complete. Launch "Intel NPU Control Panel" from the desktop menu, or run

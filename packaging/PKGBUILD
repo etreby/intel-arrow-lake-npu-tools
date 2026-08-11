@@ -30,6 +30,9 @@ arch=('any')
 url="https://github.com/etreby/intel-npu-tools"
 license=('MIT')
 depends=('python' 'ffmpeg' 'tesseract' 'tesseract-data-eng' 'pciutils')
+# The icon is rasterised at build time, so librsvg is needed to build even
+# though it is only optional at runtime.
+makedepends=('librsvg')
 optdepends=(
   'tesseract-data-ara: Arabic text recognition'
   'wl-clipboard: clipboard support on Wayland'

@@ -33,6 +33,15 @@ License:        MIT
 URL:            https://github.com/etreby/intel-npu-tools
 BuildArch:      noarch
 
+# The staging script rasterises the application icon at build time. Without
+# this the build still succeeds and quietly ships the scalable icon alone,
+# which is why render-icons.sh now treats a missing rasteriser as an error.
+%if 0%{?suse_version}
+BuildRequires:  rsvg-convert
+%else
+BuildRequires:  librsvg2-tools
+%endif
+
 # Dependency names differ between the RPM distributions, so they are selected
 # rather than assumed. Fedora's names are not openSUSE's: ffmpeg-free,
 # tesseract-langpack-eng and librsvg2-tools simply do not exist there, and a

@@ -16,6 +16,7 @@ arch=('any')
 url="https://github.com/etreby/intel-npu-tools"
 license=('MIT')
 depends=('python' 'ffmpeg' 'tesseract' 'tesseract-data-eng' 'pciutils')
+makedepends=('librsvg')
 optdepends=(
   'tesseract-data-ara: Arabic text recognition'
   'wl-clipboard: clipboard support on Wayland'

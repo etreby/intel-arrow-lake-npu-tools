@@ -15,6 +15,29 @@ PROJECT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)"
 NAME="intel-npu-tools"
 LIBDIR="$PREFIX/lib/$NAME"
 
+# This script begins by deleting its destination, and the destination comes
+# from whoever called it — %{buildroot}, $pkgdir, a mktemp directory. That is
+# fine until one of those is empty or mistyped, at which point an rm -rf is
+# pointed at something real. None of these refusals can trigger for a genuine
+# staging directory, and each of them can for a mistake.
+refuse() { echo "stage-package.sh: refusing to stage into '$DESTROOT': $1" >&2; exit 1; }
+case "$DESTROOT" in
+  /*) ;;
+  *) refuse "the destination must be an absolute path" ;;
+esac
+# A build root is always several directories deep. A single component is /usr,
+# /etc, /home or the root itself, and never a place to stage a package.
+case "${DESTROOT#/}" in
+  */*) ;;
+  *) refuse "it is a top-level directory" ;;
+esac
+if [ -e "$DESTROOT/etc/fstab" ] || [ -e "$DESTROOT/proc/self" ]; then
+  refuse "it looks like a running system rather than a build directory"
+fi
+if [ -d "$DESTROOT" ] && [ "$(cd -- "$DESTROOT" && pwd -P)" = "$PROJECT_DIR" ]; then
+  refuse "it is the project directory"
+fi
+
 COMMANDS=(intel-npu-info intel-npu-mcp intel-npu-ocr intel-npu-speech intel-npu-search intel-npu-panel)
 APPLICATIONS=(intel-npu-speech intel-npu-ocr intel-npu-panel)
 

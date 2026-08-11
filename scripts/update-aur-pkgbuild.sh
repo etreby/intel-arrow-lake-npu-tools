@@ -76,6 +76,7 @@ arch=($(printf "'%s' " "${arch[@]}" | sed 's/ $//'))
 url="$url"
 license=($(printf "'%s' " "${license[@]}" | sed 's/ $//'))
 depends=($(printf "'%s' " "${depends[@]}" | sed 's/ $//'))
+makedepends=($(printf "'%s' " "${makedepends[@]}" | sed 's/ $//'))
 optdepends=(
 HEADER
   printf "  '%s'\n" "${optdepends[@]}"
