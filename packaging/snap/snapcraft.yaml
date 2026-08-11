@@ -1,0 +1,98 @@
+# Snap packaging. Not built or published — see docs/PACKAGING_FORMATS.md.
+#
+# The reason this is the most promising sandboxed format for this project is
+# the npu-libs plug below. Canonical publishes an intel-npu-driver snap that
+# builds Intel's user-mode driver and NPU compiler from source and exposes
+# them through a content interface. Plugging it means this package never
+# bundles a driver, never pins a version against the host kernel, and never
+# owns that compatibility problem — which every other bundled format does.
+#
+# The device itself comes through custom-device, not the accel interface.
+# accel is the interface intended for /dev/accel and its documentation says it
+# is not yet available for general use; the driver snap ships today by
+# declaring the node through custom-device instead.
+#
+# Two things here are honest gaps rather than oversights, both shared with the
+# Flatpak manifest:
+#
+#   - Screenshots and the clipboard do not work under confinement yet. The
+#     code shells out to spectacle, grim, wl-copy and friends, which a sandbox
+#     cannot reach. The replacement is the desktop portals, and that is a
+#     change to desktop.py rather than to this file.
+#   - Global shortcuts likewise need the GlobalShortcuts portal in place of
+#     writing KDE's kglobalshortcutsrc.
+#
+# So the apps declared below are the ones that work confined today: the MCP
+# server and the command-line tools. The panel is deliberately absent until
+# the portal work lands, because shipping a control panel whose screenshot tab
+# cannot capture would be worse than not shipping it.
+name: intel-npu-tools
+base: core24
+adopt-info: intel-npu-tools
+summary: Local speech, OCR and semantic search on the Intel AI Boost NPU
+description: |
+  Makes the integrated Intel AI Boost NPU in Arrow Lake processors useful on
+  Linux: private semantic search, local Whisper transcription, screenshot text
+  extraction, and an MCP server that AI agents can call to keep bulk text out
+  of their context window.
+
+  The models are not included. They are large and separately licensed, so they
+  are downloaded into your own directory on first use.
+
+  Needs the intel-npu-driver snap for the NPU userspace, and your user in the
+  render group. Connect the interfaces after installing:
+
+      snap connect intel-npu-tools:npu-libs intel-npu-driver:npu-libs
+      snap connect intel-npu-tools:intel-npu intel-npu-driver:intel-npu
+
+grade: stable
+confinement: strict
+license: MIT
+
+plugs:
+  # Intel's userspace, from Canonical's driver snap rather than bundled here.
+  # The provider names this content npu-libs-2404, matching the core24 base.
+  npu-libs:
+    interface: content
+    content: npu-libs-2404
+    target: $SNAP/npu-libs
+    default-provider: intel-npu-driver
+  # /dev/accel/accel0. The provider declares the node patterns; this end only
+  # has to ask for the connection.
+  intel-npu:
+    interface: custom-device
+
+parts:
+  intel-npu-tools:
+    plugin: python
+    source: .
+    override-pull: |
+      craftctl default
+      craftctl set version="$(sed -n 's/^version = "\(.*\)"/\1/p' pyproject.toml | head -1)"
+    stage-packages:
+      - ffmpeg
+      - tesseract-ocr
+      - tesseract-ocr-eng
+      - tesseract-ocr-ara
+      - pciutils
+    build-environment:
+      - PIP_DISABLE_PIP_VERSION_CHECK: "1"
+
+environment:
+  # Where the plugged content lands, so the Level Zero loader inside the snap
+  # finds Intel's driver rather than looking for a system one that confinement
+  # would hide anyway.
+  LD_LIBRARY_PATH: $SNAP/npu-libs:$SNAP/usr/lib/$CRAFT_ARCH_TRIPLET_BUILD_FOR:$LD_LIBRARY_PATH
+  ZE_ENABLE_ALT_DRIVERS: $SNAP/npu-libs/libze_intel_npu.so.1
+
+apps:
+  # stdio, so an agent on the host can launch it.
+  mcp:
+    command: bin/intel-npu-mcp
+    plugs: [home, network, npu-libs, intel-npu]
+  info:
+    command: bin/intel-npu-info
+    plugs: [hardware-observe, npu-libs, intel-npu]
+  search:
+    command: bin/intel-npu-search
+    plugs: [home, network, npu-libs, intel-npu]

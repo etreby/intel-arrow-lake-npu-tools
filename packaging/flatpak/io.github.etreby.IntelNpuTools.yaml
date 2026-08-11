@@ -1,0 +1,84 @@
+# Flatpak manifest. Not built or published — see docs/PACKAGING_FORMATS.md.
+#
+# Two things about this manifest are worth reading before it is built.
+#
+# --device=all is not laziness. Flatpak's device permission takes dri, kvm,
+# shm, input, usb and all; dri means /dev/dri, and the NPU is /dev/accel,
+# which no narrower value covers. An NPU application on Flatpak therefore asks
+# for every device on the machine, and a Flathub reviewer will ask why. The
+# honest answer is the one above, and it is worth saying in the submission
+# rather than waiting to be asked.
+#
+# The screenshot and clipboard features do not work under this manifest yet.
+# The code shells out to spectacle, grim, wl-copy and the rest, and a sandbox
+# cannot see them. The replacement is org.freedesktop.portal.Screenshot, which
+# supports non-interactive capture after a one-time permission grant — KDE
+# skips the dialog for such requests outright — so instant capture on a
+# keyboard shortcut does survive sandboxing. That is a change to desktop.py,
+# not to this file, and until it lands the OCR features are unavailable here.
+# The portal names are already requested below so the manifest does not need
+# revisiting when they do.
+#
+# Global shortcuts need org.freedesktop.portal.GlobalShortcuts, which KDE and
+# Hyprland implement and GNOME does not yet, in place of writing KDE's
+# kglobalshortcutsrc directly.
+app-id: io.github.etreby.IntelNpuTools
+runtime: org.freedesktop.Platform
+runtime-version: '24.08'
+sdk: org.freedesktop.Sdk
+command: intel-npu-panel
+
+finish-args:
+  # The NPU. See the note above about why this is not --device=dri.
+  - --device=all
+  - --socket=wayland
+  - --socket=fallback-x11
+  - --share=ipc
+  # Model downloads and nothing else; no inference leaves the machine.
+  - --share=network
+  # Where the user's models, settings and semantic index live. Scoped to the
+  # application's own directory rather than the whole home.
+  - --persist=.local/share/intel-npu-tools
+  # Reading documents to index, and images to OCR, is the point of the tool.
+  - --filesystem=home:ro
+  # Microphone, for speech to text.
+  - --socket=pulseaudio
+  # The portals the desktop features will use once desktop.py speaks them.
+  - --talk-name=org.freedesktop.portal.Screenshot
+  - --talk-name=org.freedesktop.portal.Clipboard
+  - --talk-name=org.freedesktop.portal.GlobalShortcuts
+
+modules:
+  - name: tesseract-data
+    buildsystem: simple
+    build-commands:
+      - install -Dm644 eng.traineddata /app/share/tessdata/eng.traineddata
+      - install -Dm644 ara.traineddata /app/share/tessdata/ara.traineddata
+    sources:
+      - type: file
+        url: https://github.com/tesseract-ocr/tessdata_fast/raw/4.1.0/eng.traineddata
+        sha256: 7d4322bd2a7749724879683fc3912cb542f19906c83bcc1a52132556427170b2
+      - type: file
+        url: https://github.com/tesseract-ocr/tessdata_fast/raw/4.1.0/ara.traineddata
+        sha256: e3206d3dc87fd50c24a0fb9f01838615911d25168f4e64415244b67d2bb3e729
+
+  # OpenVINO and the rest come from PyPI. Flatpak builds offline, so a real
+  # manifest needs every wheel listed with its hash — generate that with
+  # flatpak-pip-generator rather than maintaining it by hand:
+  #
+  #   flatpak-pip-generator --runtime=org.freedesktop.Sdk//24.08 \
+  #     --output python3-requirements openvino openvino-genai \
+  #     openvino-tokenizers numpy pillow opencv-python-headless 'mcp>=2,<3'
+  #
+  # That emits python3-requirements.yaml, which is included here.
+  - python3-requirements.yaml
+
+  - name: intel-npu-tools
+    buildsystem: simple
+    build-commands:
+      - pip3 install --no-index --no-build-isolation --prefix=/app .
+      - install -Dm644 packaging/icons/intel-npu-tools.svg
+          /app/share/icons/hicolor/scalable/apps/io.github.etreby.IntelNpuTools.svg
+    sources:
+      - type: dir
+        path: ../..

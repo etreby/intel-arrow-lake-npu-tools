@@ -1,0 +1,52 @@
+# Build Intel's NPU userspace driver from source on Fedora.
+#
+# This exists to answer one question empirically: can an RPM distribution run
+# the NPU at all, given that Intel publishes the driver only as .deb for
+# Ubuntu 24.04 and no RPM of it exists anywhere?
+#
+# Only two of the three pieces have to be built. The firmware is already
+# solved — /lib/firmware/intel/vpu belongs to linux-firmware, which Fedora,
+# openSUSE and Arch all ship, so nobody needs to redistribute Intel firmware.
+# The Level Zero loader is packaged as oneapi-level-zero. What is missing on
+# every RPM distribution is the user-mode driver and the NPU compiler, and
+# those are MIT licensed, so building and redistributing them is allowed.
+#
+# Built at a pinned tag rather than a branch, because the thing it has to stay
+# compatible with is the host's kernel driver.
+FROM fedora:41
+
+ARG NPU_DRIVER_TAG=v1.35.0
+
+# The driver's own build dependencies. It vendors much of what it needs as git
+# submodules, which is why the clone is recursive and slow.
+RUN dnf install -y --setopt=install_weak_deps=False \
+      git cmake ninja-build gcc gcc-c++ make \
+      oneapi-level-zero oneapi-level-zero-devel \
+      python3 python3-pip python3-devel \
+      libudev-devel pciutils \
+    && dnf clean all
+
+RUN set -eux; \
+    git clone --depth 1 --branch "${NPU_DRIVER_TAG}" --recurse-submodules --shallow-submodules \
+      https://github.com/intel/linux-npu-driver.git /src/npu-driver; \
+    cmake -S /src/npu-driver -B /src/build -G Ninja \
+      -DCMAKE_BUILD_TYPE=Release \
+      -DCMAKE_INSTALL_PREFIX=/usr \
+      -DENABLE_NPU_COMPILER_BUILD=ON; \
+    cmake --build /src/build --parallel "$(nproc)"; \
+    cmake --install /src/build; \
+    ldconfig; \
+    rm -rf /src
+
+# The toolkit, so the same three-step check can run here as against the
+# Ubuntu image: open the device, find the NPU, run a model on it.
+COPY pyproject.toml README.md LICENSE /app/
+COPY src /app/src
+RUN pip install --no-cache-dir /app
+
+ENV INTEL_NPU_TOOLS_HOME=/models
+RUN mkdir -p /models
+VOLUME /models
+
+ENTRYPOINT []
+CMD ["intel-npu-mcp"]
