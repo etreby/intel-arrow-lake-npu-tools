@@ -48,6 +48,11 @@ jobs:
             --define "_topdir $PWD/rpmbuild" --define "_projectdir $PWD" 2>&1 | tee /tmp/rpm.log
           ! sed -n '/RPM build warnings/,$p' /tmp/rpm.log | grep -q '[^[:space:]]' \
             || { sed -n '/RPM build warnings/,$p' /tmp/rpm.log; exit 1; }
+      - name: Check the AUR PKGBUILD has not drifted
+        # It is generated from packaging/PKGBUILD so the two cannot end up
+        # disagreeing about dependencies. This only compares metadata, so it
+        # needs no network and does not care which version is pinned.
+        run: ./scripts/update-aur-pkgbuild.sh --check
       - name: Validate shell
         run: |
           bash -n install.sh uninstall.sh scripts/*.sh packaging/intel-npu-tools-setup
@@ -57,15 +62,78 @@ jobs:
           python -m build
           python -m twine check dist/*.whl dist/*.tar.gz
 
-  # The three jobs below install the native packages on the distributions they
-  # are for. static-checks above builds the RPM on Debian, which proves the
-  # spec is syntactically sound but cannot prove a single dependency name is
-  # real — and the spec picks different names per distribution with an %if, so
-  # a Debian build never even evaluates the openSUSE branch. These do.
+  # The jobs below install each native package on a distribution it is for.
+  # Building a package proves the spec is syntactically sound but cannot
+  # prove a single dependency name is real — and the RPM spec picks different
+  # names per distribution with an %if, so it is built three times, once per
+  # branch it can take. These do.
   #
   # None of them runs a wrapper or intel-npu-tools-setup: those bootstrap a
   # virtual environment and download models, which is deliberately not what
   # installing the package does.
+
+  install-debian:
+    runs-on: ubuntu-24.04
+    container: debian:stable
+    steps:
+      - name: Install the build and packaging tools
+        run: |
+          apt-get update
+          apt-get install -y --no-install-recommends \
+            git ca-certificates fakeroot librsvg2-bin desktop-file-utils python3
+      - name: Let the container install documentation
+        # The Debian images exclude share/doc with a dpkg path-exclude, for the
+        # same size reasons as the RPM and Arch images.
+        run: rm -f /etc/dpkg/dpkg.cfg.d/docker
+      - uses: actions/checkout@v7
+      - name: Build the .deb
+        run: ./scripts/build-deb.sh dist
+      - name: Install it, which resolves every hard dependency
+        run: apt-get install -y ./dist/*.deb
+      - name: Check every dependency name means something here
+        run: ./scripts/verify-package-deps.sh dist/*.deb
+      - name: Check what landed on the system
+        run: ./scripts/verify-installed-tree.sh
+      - name: Remove it again, and take away everything it owned
+        run: |
+          ./scripts/package-files.sh > /tmp/owned.txt
+          apt-get remove -y intel-npu-tools
+          ./scripts/verify-removed-tree.sh /tmp/owned.txt
+
+  install-enterprise-linux:
+    runs-on: ubuntu-24.04
+    container: almalinux:9
+    steps:
+      - name: Install the build and packaging tools
+        # Enterprise Linux carries neither tesseract nor an unencumbered ffmpeg
+        # in its own repositories, so EPEL is not optional here. CRB carries
+        # some of what EPEL itself builds against.
+        run: |
+          dnf install -y epel-release
+          dnf config-manager --set-enabled crb
+          dnf install -y --setopt=install_weak_deps=False \
+            git rpm-build librsvg2-tools desktop-file-utils
+      - name: Let the container install documentation
+        run: |
+          if [ -f /etc/dnf/dnf.conf ]; then
+            sed -i '/^tsflags=/d' /etc/dnf/dnf.conf
+          fi
+      - uses: actions/checkout@v7
+      - name: Build the RPM on Enterprise Linux itself
+        run: |
+          rpmbuild -bb packaging/intel-npu-tools.spec \
+            --define "_topdir $PWD/rpmbuild" --define "_projectdir $PWD"
+      - name: Install it, which resolves every hard dependency
+        run: dnf install -y ./rpmbuild/RPMS/noarch/*.rpm
+      - name: Check every dependency name means something here
+        run: ./scripts/verify-package-deps.sh rpmbuild/RPMS/noarch/*.rpm
+      - name: Check what landed on the system
+        run: ./scripts/verify-installed-tree.sh
+      - name: Remove it again, and take away everything it owned
+        run: |
+          ./scripts/package-files.sh > /tmp/owned.txt
+          dnf remove -y intel-npu-tools
+          ./scripts/verify-removed-tree.sh /tmp/owned.txt
 
   install-fedora:
     runs-on: ubuntu-24.04
@@ -165,6 +233,38 @@ jobs:
         run: pacman -U --noconfirm packaging/*.pkg.tar.zst
       - name: Check every dependency name means something here
         run: ./scripts/verify-package-deps.sh packaging/*.pkg.tar.zst
+      - name: Check what landed on the system
+        run: ./scripts/verify-installed-tree.sh
+      - name: Remove it again, and take away everything it owned
+        run: |
+          ./scripts/package-files.sh > /tmp/owned.txt
+          pacman -R --noconfirm intel-npu-tools
+          ./scripts/verify-removed-tree.sh /tmp/owned.txt
+
+  install-arch-from-aur:
+    runs-on: ubuntu-24.04
+    container: archlinux:latest
+    steps:
+      - name: Install the build and packaging tools
+        run: pacman -Syu --noconfirm --needed base-devel git librsvg desktop-file-utils sudo
+      - name: Let the container install documentation
+        run: sed -i '/^NoExtract/d' /etc/pacman.conf
+      - uses: actions/checkout@v7
+      - name: Make an unprivileged user, because makepkg refuses to run as root
+        run: |
+          useradd -m builder
+          echo 'builder ALL=(ALL) NOPASSWD: ALL' > /etc/sudoers.d/builder
+          chown -R builder:builder "$GITHUB_WORKSPACE"
+      - name: Build it the way the AUR would
+        # Fetches the released tarball named in the PKGBUILD and checks it
+        # against the recorded sha256sum, which is the part that distinguishes
+        # this from the working-tree build the install-arch job does. It
+        # therefore tests the last release, not this commit.
+        run: sudo -u builder bash -c 'cd packaging/aur && makepkg -s --noconfirm'
+      - name: Install it
+        run: pacman -U --noconfirm packaging/aur/*.pkg.tar.zst
+      - name: Check every dependency name means something here
+        run: ./scripts/verify-package-deps.sh packaging/aur/*.pkg.tar.zst
       - name: Check what landed on the system
         run: ./scripts/verify-installed-tree.sh
       - name: Remove it again, and take away everything it owned

@@ -8,10 +8,12 @@
 # Arch repositories. Each user runs intel-npu-tools-setup once.
 #
 # Builds from the working tree rather than a release tarball, which is what
-# makes `makepkg -si` work on a local checkout. That also means it is not in a
-# shape the AUR accepts: an AUR package must fetch a versioned source from a
-# URL and check it against a sha256sum, so publishing there needs a source=()
-# entry pointing at the release tarball.
+# makes `makepkg -si` work on a local checkout of work that has not been
+# published. The AUR will not accept that — a package there must fetch a
+# versioned source from a URL and check it against a sha256sum — so the
+# AUR-shaped one lives in aur/PKGBUILD and is generated from this file by
+# scripts/update-aur-pkgbuild.sh. Edit the dependencies here, run that, and
+# commit both; CI fails if the two disagree.
 #
 # Built with a real `makepkg -s` in an Arch container and installed with
 # `pacman -U` on every push, by the install-arch job. That also proves every

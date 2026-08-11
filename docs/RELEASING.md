@@ -92,13 +92,31 @@ python -m build                                   # wheel and sdist
 `APT_GPG_KEY_ID` names one, and refuses to run if there is no key at all
 rather than producing a repository nobody can install from.
 
-## What is not automated
+## Refresh the AUR PKGBUILD after tagging
 
-The Arch and RPM packages are built by hand. Neither `makepkg` nor `rpmbuild`
-runs on the Ubuntu image the workflow uses, and cross-building them there would
-produce packages nobody had tested on the distribution they target.
+`packaging/aur/PKGBUILD` names a released tarball and its `sha256sum`, so it
+can only be updated once the tag it refers to exists. Push the tag, then:
 
 ```bash
-cd packaging && makepkg -si
-rpmbuild -bb packaging/intel-npu-tools.spec --define "_projectdir $PWD"
+./scripts/update-aur-pkgbuild.sh          # uses the version in pyproject.toml
+git add packaging/aur/PKGBUILD && git commit
 ```
+
+Do not edit that file by hand. It is generated from `packaging/PKGBUILD`, and
+CI fails if the two disagree about dependencies — `update-aur-pkgbuild.sh
+--check` is what it runs. Change dependencies in `packaging/PKGBUILD` and
+regenerate.
+
+Until the tag is pushed the file still describes the previous release, which
+is correct: the AUR can only build a version that exists.
+
+## What is not automated
+
+Publishing to the AUR itself. The PKGBUILD is in an acceptable shape and CI
+builds it exactly as the AUR would — fetching the tarball and checking the
+sum — but pushing it to `aur.archlinux.org` needs an AUR account and an SSH
+key, and has never been done.
+
+Every package is otherwise built and installed on the distribution it targets
+by the container jobs in `validate.yml`, on every push, so nothing here needs
+building by hand to know whether it works.

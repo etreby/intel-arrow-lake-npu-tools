@@ -68,9 +68,45 @@ if [[ ! -d "$LIBDIR" ]]; then
   exit 1
 fi
 
-echo "Creating the Python environment in $VENV…"
+# python3 is not necessarily new enough. Enterprise Linux 9 ships 3.9 as
+# python3 and carries newer interpreters beside it under their own names, so
+# taking python3 on faith there builds an environment that cannot run this at
+# all. Newest first, and python3 last so it wins on a distribution where it is
+# already the newest thing present.
+# Being new enough is not sufficient: Debian and its derivatives ship the venv
+# machinery separately, so an interpreter can be present and modern and still
+# unable to build an environment. Taking the newest one on version alone would
+# pick python3.13 with no python3.13-venv over a perfectly good python3.11 and
+# then fail. Both are checked, and a candidate that cannot do the job is
+# passed over rather than fatal.
+find_python() {
+  local candidate
+  for candidate in python3.14 python3.13 python3.12 python3.11 python3.10 python3; do
+    command -v "$candidate" >/dev/null || continue
+    if "$candidate" -c '
+import sys
+if sys.version_info < (3, 10):
+    raise SystemExit(1)
+import venv, ensurepip          # noqa: F401 — presence is the whole test
+' 2>/dev/null; then
+      printf '%s' "$candidate"
+      return 0
+    fi
+  done
+  return 1
+}
+
+if ! PYTHON="$(find_python)"; then
+  echo "No Python 3.10 or newer that can create a virtual environment was found." >&2
+  echo "Install one and run this again:" >&2
+  echo "    Enterprise Linux 9:  sudo dnf install python3.12 python3.12-pip" >&2
+  echo "    Debian and Ubuntu:   sudo apt install python3-venv" >&2
+  exit 1
+fi
+
+echo "Creating the Python environment in $VENV, using $PYTHON…"
 mkdir -p "$DATA_DIR"
-python3 -m venv "$VENV"
+"$PYTHON" -m venv "$VENV"
 "$VENV/bin/python" -m pip install --upgrade --quiet pip
 # Installed from the copy the package shipped, so this never reaches the
 # network for the toolkit itself — only for its published dependencies.

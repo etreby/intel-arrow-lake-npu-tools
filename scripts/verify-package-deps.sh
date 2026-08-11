@@ -54,6 +54,21 @@ elif command -v pacman >/dev/null; then
   package_exists() { pacman -Si -- "$1" >/dev/null 2>&1; }
   suggest_similar() { pacman -Ssq -- "^$1" 2>/dev/null; }
   QUERY_FORMS="pacman"
+elif command -v apt-cache >/dev/null; then
+  # A name apt has never heard of produces no stanza at all. A name that only
+  # appears as an unsatisfiable dependency of something else does produce one,
+  # with neither a version nor a provider in it, so the sections are what is
+  # read rather than the mere existence of output.
+  package_exists() {
+    apt-cache showpkg -- "$1" 2>/dev/null | awk '
+      /^Versions:/          { section = "versions"; next }
+      /^Reverse Provides:/  { section = "provides"; next }
+      /^[A-Z][^:]*:[[:space:]]*$/ { section = ""; next }
+      NF && (section == "versions" || section == "provides") { found = 1 }
+      END { exit found ? 0 : 1 }'
+  }
+  suggest_similar() { apt-cache pkgnames -- "$1" 2>/dev/null; }
+  QUERY_FORMS="apt"
 else
   echo "no supported package manager found" >&2
   exit 1
@@ -85,6 +100,41 @@ real_names() {
     | sort -u
 }
 
+# A Debian dependency field is one comma-separated line. Version constraints
+# ride in brackets after the name, and alternatives are joined by a pipe —
+# those are kept as they are, because any one of them satisfies the
+# requirement and splitting them here would demand all of them.
+#
+# The version constraint is dropped rather than evaluated: this asks whether a
+# name means anything here, not whether the archive holds a new enough copy.
+# Comparing Debian versions properly needs dpkg itself and would still only
+# repeat what installing the package already proves for the required set. It
+# does mean a weak dependency pinned to a version this distribution does not
+# carry reads as satisfied.
+deb_names() {
+  tr ',' '\n' \
+    | sed -e 's/([^)]*)//g' -e 's/\[[^]]*\]//g' -e 's/<[^>]*>//g' \
+          -e 's/[[:space:]]\{1,\}/ /g' -e 's/^ //' -e 's/ $//' \
+    | awk 'NF' | sort -u
+}
+
+# One requirement, which may be a single name or a choice between several.
+requirement_met() {
+  local requirement="$1" alternative
+  case "$requirement" in
+    *\|*)
+      local IFS='|'
+      for alternative in $requirement; do
+        alternative="${alternative# }"; alternative="${alternative% }"
+        [ -n "$alternative" ] || continue
+        package_exists "$alternative" && return 0
+      done
+      return 1
+      ;;
+    *) package_exists "$requirement" ;;
+  esac
+}
+
 case "$PACKAGE" in
   *.rpm)
     # Queried one at a time rather than as a group: a group's exit status is
@@ -102,6 +152,11 @@ case "$PACKAGE" in
     # "optdepend = name: why you might want it"
     weak=$(printf '%s\n' "$metadata" | sed -n 's/^optdepend = //p' | cut -d: -f1 | real_names)
     ;;
+  *.deb)
+    hard=$(dpkg-deb -f "$PACKAGE" Depends | deb_names)
+    weak=$( { dpkg-deb -f "$PACKAGE" Recommends; echo
+              dpkg-deb -f "$PACKAGE" Suggests; } | deb_names)
+    ;;
   *)
     echo "unsupported package type: $PACKAGE" >&2
     exit 1
@@ -115,7 +170,7 @@ check_group() {
   [ -n "$names" ] || return 0
   echo "$label:"
   while read -r name; do
-    if package_exists "$name"; then
+    if requirement_met "$name"; then
       echo "  ok       $name"
       continue
     fi

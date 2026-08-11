@@ -45,7 +45,17 @@ BuildArch:      noarch
 # ffmpeg and python3 are deliberately unversioned virtual names. openSUSE has
 # no package called either, and requiring ffmpeg-7 or python311 instead would
 # break at the next major version.
+%if 0%{?rhel} == 9
+# Enterprise Linux 9 ships 3.9 as python3 and will never ship anything newer
+# under that name, so python3 >= 3.10 is not a dependency that can be
+# satisfied there at all — it simply refuses to install. 3.12 is in AppStream
+# beside it under its own name, and intel-npu-tools-setup picks the newest
+# interpreter it can find rather than assuming python3 is new enough.
+Requires:       python3.12
+Requires:       python3.12-pip
+%else
 Requires:       python3 >= 3.10
+%endif
 Requires:       pciutils
 
 %if 0%{?suse_version}
@@ -67,7 +77,15 @@ Recommends:     librsvg2-tools
 Recommends:     wl-clipboard
 
 Suggests:       gnome-screenshot
+%if ! 0%{?rhel}
+# Neither Enterprise Linux nor EPEL carries grim, and a suggestion naming a
+# package that does not exist is dropped without a word. Guarded for every
+# Enterprise Linux rather than for 9 alone, because a suggestion that is
+# absent costs a wlroots user on a distribution that does not ship wlroots
+# compositors nothing, and an untested release failing to build would cost
+# rather more.
 Suggests:       grim
+%endif
 
 %description
 Makes the integrated Intel AI Boost NPU in Arrow Lake processors useful on
