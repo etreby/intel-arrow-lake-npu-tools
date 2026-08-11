@@ -10,7 +10,11 @@ models/
 /npu_speech_app.py
 speech-history.txt
 *.wav
+# Screenshots and recordings made while testing, but not the documentation
+# images: a blanket *.png silently excluded every screenshot the README
+# points at, so they were broken on GitHub while looking fine locally.
 *.png
+!docs/images/*.png
 dist/
 build/
 *.egg-info/
