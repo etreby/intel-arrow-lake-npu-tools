@@ -51,12 +51,12 @@ to it.
 
 | | Docker | Flatpak | Snap | AppImage |
 |---|---|---|---|---|
-| `/dev/accel` | `--device` + `--group-add render` | only via `--device=all` | `accel` interface not usable yet | host device, no mediation |
+| `/dev/accel` | `--device` + `--group-add render` | only via `--device=all` | `custom-device`, works today | host device, no mediation |
 | Host capture/clipboard | no | portals, after a rewrite | portals, after a rewrite | yes |
 | MCP server | good fit | workable | workable | yes |
 | Global shortcuts | no | portal, KDE yes / GNOME no | same | yes |
-| Bundles Intel userspace | yes, pinned | yes | Canonical ships one | fragile |
-| Verdict | **worth doing, headless only** | **possible, expensive** | **blocked today** | **little gained** |
+| Bundles Intel userspace | yes, pinned | yes | no — plugs Canonical's | fragile |
+| Verdict | **worth doing, headless only** | **possible, expensive** | **possible, driver already solved** | **little gained** |
 
 ## Docker — worth doing, for the headless half
 
@@ -116,24 +116,30 @@ better than what exists now, sandbox or no sandbox. The cost is that it is a
 rewrite of the desktop integration layer, plus bundling OpenVINO and Intel's
 NPU userspace into the runtime, plus `--device=all`.
 
-## Snap — blocked today, for a specific reason
+## Snap — not blocked, and the only format with the driver problem solved
 
-Snap has an `accel` interface, intended for exactly this: access to device
-nodes in `/dev/accel` managed by the Linux compute accelerator subsystem. Its
-own documentation describes it as under development and not currently
-available for general use. Until that changes, a strictly confined snap cannot
-reach the NPU, and the only route is classic confinement — which switches off
-the confinement that is the reason to choose Snap.
+Snap has an `accel` interface intended for exactly this, and its documentation
+describes it as under development and not available for general use. It would
+be easy to stop there and call Snap blocked. That is wrong, and Canonical's
+own Intel NPU driver snap is the proof: it ships today and reaches the device
+through the **`custom-device`** interface instead, declaring the node patterns
+`/dev/accel/accel[0-9]` and the rest explicitly. `accel` is the tidier future
+spelling, not a precondition.
 
-Canonical does publish an Intel NPU driver snap providing the userspace
-components, so the bundling problem is further along here than anywhere else,
-and the same non-root requirements apply: the user in the `render` group and
-the device node group-writable.
+More usefully, that snap solves the hardest requirement on this page *for*
+anyone building on it. It exposes Intel's userspace — the user-mode driver and
+the NPU compiler — through a **content interface** named `npu-libs-2404`. A
+snap of this project would plug that and get the driver from Canonical, rather
+than bundling and pinning a copy and owning the compatibility problem forever.
+No other format on this page offers that. It also builds the driver from
+source at a pinned git tag (`v1.35.0`) rather than repacking Intel's `.deb`,
+which is independently useful: it is a worked example that a from-source build
+is viable, which is the route any non-Debian distribution has to take.
 
-The desktop-tool problem is identical to Flatpak's and has the same portal
-answer. The sensible reading is that Snap is Flatpak's work plus a blocker
-nobody here controls, so if only one sandboxed format is ever done, it should
-be Flatpak.
+The desktop-tool problem is identical to Flatpak's, with the same portal
+answer. So the honest ranking between the two sandboxed formats is closer than
+it first appears: Flatpak has the wider desktop reach, Snap has the driver
+already packaged and a content interface designed to share it.
 
 ## AppImage — least gained
 
@@ -155,6 +161,20 @@ all — Gentoo, NixOS, Void. That is a thinner reason than it first appears,
 since users of those distributions generally prefer a native definition, and
 `stage-package.sh` already makes writing one cheap.
 
+## A gap this turned up, which is not about any of these formats
+
+Intel publishes the NPU userspace driver **only as `.deb`, only for Ubuntu
+24.04**. There is no RPM. That is fine for the `.deb` this project ships and
+awkward for the three RPM packages it also ships: a Fedora, openSUSE or
+Enterprise Linux user can install `intel-npu-tools` cleanly — CI proves that on
+every push — and then has no packaged way to install the driver it needs.
+
+The routes are to build `linux-npu-driver` from source, which Canonical's snap
+demonstrates is viable, or to unpack Intel's `.deb` and place the shared
+objects by hand. Both work; neither is something to leave a user to discover.
+This belongs in the documentation regardless of whether any format on this page
+is ever built.
+
 ## If any of this gets built
 
 Test on real hardware, not in CI. GitHub's runners have no NPU, so every job in
@@ -167,7 +187,8 @@ hardware.
 Sources for the claims about other projects' tooling:
 
 - [Flatpak sandbox permissions](https://docs.flatpak.org/en/latest/sandbox-permissions.html) — the `--device=` values
-- [Snap `accel` interface](https://snapcraft.io/docs/reference/interfaces/accel-interface/) — under development, not generally available
-- [Intel NPU driver snap](https://github.com/canonical/intel-npu-driver-snap) — Canonical's userspace packaging
+- [Snap `accel` interface](https://snapcraft.io/docs/reference/interfaces/accel-interface/) — under development, and not the route the working snap takes
+- [Intel NPU driver snap](https://github.com/canonical/intel-npu-driver-snap) — `custom-device` for the node, `npu-libs-2404` content interface, built from source at a pinned tag
+- [Intel `linux-npu-driver` releases](https://github.com/intel/linux-npu-driver/releases) — `.deb` for Ubuntu 24.04 only, no RPM
 - [`org.freedesktop.portal.GlobalShortcuts`](https://flatpak.github.io/xdg-desktop-portal/docs/doc-org.freedesktop.portal.GlobalShortcuts.html)
 - [Screenshot portal permission](https://github.com/flatpak/xdg-desktop-portal/pull/851) — non-interactive capture after a one-time grant

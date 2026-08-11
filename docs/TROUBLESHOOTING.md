@@ -11,6 +11,25 @@ journalctl -k -b --no-pager | grep -Ei 'intel_vpu|npu|vpu'
 
 The device list must contain `NPU: Intel(R) AI Boost`. The active login must include the `render` group after driver installation; log out and back in if it does not.
 
+## The NPU driver on Fedora, openSUSE and Enterprise Linux
+
+Intel publishes the NPU userspace driver only as `.deb`, and only for Ubuntu
+24.04. There is no RPM of it anywhere, so on an RPM distribution the package
+installs cleanly and `intel-npu-info` still reports no NPU, because the
+userspace half of the driver is simply not present.
+
+Two ways round it, neither packaged:
+
+- Build [`linux-npu-driver`](https://github.com/intel/linux-npu-driver) from
+  source, against your distribution's `level-zero`. Canonical's NPU driver snap
+  does exactly this at a pinned tag, so it is a well-trodden route.
+- Unpack Intel's `.deb` files from a release tarball and place the shared
+  objects by hand. Quicker, and it depends on your distribution's glibc being
+  compatible with the one Ubuntu 24.04 built against.
+
+The kernel side needs nothing special: `intel_vpu` is in the mainline kernel.
+Check with `lsmod | grep intel_vpu` and `ls -l /dev/accel/accel0`.
+
 ## MCP client cannot find the tools
 
 Run `intel-npu-mcp` directly and confirm it stays open waiting for stdio input. Then inspect the client registration documented in the README. Restart existing agent sessions because MCP tool lists are normally loaded only at session startup.
