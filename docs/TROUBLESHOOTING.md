@@ -18,14 +18,28 @@ Intel publishes the NPU userspace driver only as `.deb`, and only for Ubuntu
 installs cleanly and `intel-npu-info` still reports no NPU, because the
 userspace half of the driver is simply not present.
 
-Two ways round it, neither packaged:
+Less is missing than it first appears. The firmware is already there —
+`/lib/firmware/intel/vpu` belongs to `linux-firmware`, which Fedora, openSUSE
+and Arch all ship — and the Level Zero loader is packaged, as
+`oneapi-level-zero` on Fedora. Only Intel's user-mode driver and NPU compiler
+have no RPM.
 
-- Build [`linux-npu-driver`](https://github.com/intel/linux-npu-driver) from
-  source, against your distribution's `level-zero`. Canonical's NPU driver snap
-  does exactly this at a pinned tag, so it is a well-trodden route.
-- Unpack Intel's `.deb` files from a release tarball and place the shared
-  objects by hand. Quicker, and it depends on your distribution's glibc being
-  compatible with the one Ubuntu 24.04 built against.
+Two ways round that, neither packaged:
+
+- **Unpack Intel's `.deb` files** from a release tarball and let the linker
+  find them. This is verified working on Fedora 41 against an Arrow Lake NPU:
+  `packaging/docker/Dockerfile.fedora` does exactly this and runs a model on
+  the device. Note that the `.deb` installs into Debian's multiarch directory,
+  which Fedora does not search, so `/usr/lib/x86_64-linux-gnu` has to be added
+  to `/etc/ld.so.conf.d`. Do not also install Intel's Level Zero `.deb`: use
+  your distribution's loader, because two loaders is how this breaks subtly.
+- **Build [`linux-npu-driver`](https://github.com/intel/linux-npu-driver) from
+  source.** Correct, and much heavier than it sounds: building the compiler
+  pulls in OpenVINO and LLVM and runs to some 7,500 compilation steps. On
+  Fedora 41 it currently fails partway, because Intel builds with `-Werror`
+  and GCC 14 raises `maybe-uninitialized` inside LLVM's own headers.
+  Canonical's NPU driver snap builds it this way successfully, so it is
+  achievable with the right toolchain.
 
 The kernel side needs nothing special: `intel_vpu` is in the mainline kernel.
 Check with `lsmod | grep intel_vpu` and `ls -l /dev/accel/accel0`.

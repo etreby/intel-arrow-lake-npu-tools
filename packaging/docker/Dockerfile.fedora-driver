@@ -1,8 +1,24 @@
 # Build Intel's NPU userspace driver from source on Fedora.
 #
-# This exists to answer one question empirically: can an RPM distribution run
-# the NPU at all, given that Intel publishes the driver only as .deb for
-# Ubuntu 24.04 and no RPM of it exists anywhere?
+# THIS DOES NOT CURRENTLY BUILD. It is kept because it gets far enough to be
+# worth knowing about, and because the failure is specific rather than vague.
+#
+# Enabling the compiler makes the build clone OpenVINO and LLVM and run to
+# roughly 7,500 compilation steps. On Fedora 41 it stops at about 5,900 with
+# -Werror=maybe-uninitialized raised inside LLVM's own DenseMap.h — a GCC 14
+# false positive on code Intel does not maintain, made fatal because the build
+# sets -Werror. The likely fixes are ENABLE_COMPILATION_FLAGS_OVERRIDE=ON with
+# -Wno-error, or an image whose GCC is older; each attempt costs the better
+# part of an hour, so neither has been tried.
+#
+# Dockerfile.fedora next to this file takes the shorter route and *is* verified
+# working: Fedora's own Level Zero loader plus Intel's binaries unpacked from
+# their .deb. If all you want is the NPU running on an RPM distribution, use
+# that. This file matters only if you want to build the driver rather than
+# redistribute Intel's build of it.
+#
+# It exists to answer one question: can an RPM distribution run the NPU at all,
+# given that Intel publishes the driver only as .deb for Ubuntu 24.04?
 #
 # Only two of the three pieces have to be built. The firmware is already
 # solved — /lib/firmware/intel/vpu belongs to linux-firmware, which Fedora,

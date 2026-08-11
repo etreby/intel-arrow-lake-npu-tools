@@ -1,0 +1,64 @@
+# Run the NPU on Fedora, using Intel's published binaries.
+#
+# Intel ships the NPU userspace only as .deb, only for Ubuntu 24.04, so an RPM
+# distribution has nothing to install. This takes the shortest honest route:
+# Fedora's own Level Zero loader, plus Intel's user-mode driver and compiler
+# unpacked out of their .deb. The driver is MIT licensed, so redistributing
+# the binaries is allowed.
+#
+# Only those two pieces are missing on an RPM distribution. The firmware is
+# already solved — /lib/firmware/intel/vpu belongs to linux-firmware, which
+# Fedora ships — and the loader is packaged as oneapi-level-zero.
+#
+# The alternative is building the driver from source, which Dockerfile.fedora-
+# driver attempts. That is a far heavier proposition than it looks: enabling
+# the compiler makes the build clone OpenVINO and LLVM and run to some 7,500
+# compilation steps, and on Fedora 41 it stops partway because Intel builds
+# with -Werror and GCC 14 raises maybe-uninitialized on LLVM's own DenseMap.
+# Unpacking a .deb is inelegant; it is also what works today.
+FROM fedora:41
+
+ARG NPU_DRIVER_TAG=v1.35.0
+ARG NPU_DRIVER_ASSET=linux-npu-driver-v1.35.0.20260722-29947505341-ubuntu2404.tar.gz
+
+ENV INTEL_NPU_TOOLS_HOME=/models
+
+# binutils for ar, which is how a .deb is opened; zstd because that is what
+# Ubuntu 24.04 compresses the payload with.
+RUN dnf install -y --setopt=install_weak_deps=False \
+      oneapi-level-zero \
+      python3 python3-pip \
+      ffmpeg-free tesseract tesseract-langpack-eng tesseract-langpack-ara \
+      pciutils binutils zstd tar curl \
+    && dnf clean all
+
+RUN set -eux; \
+    workdir=/opt/npu-driver; mkdir -p "$workdir"; cd "$workdir"; \
+    curl -fsSLO "https://github.com/intel/linux-npu-driver/releases/download/${NPU_DRIVER_TAG}/${NPU_DRIVER_ASSET}"; \
+    tar xf "${NPU_DRIVER_ASSET}"; \
+    # Intel's level-zero .deb is deliberately not taken: Fedora packages the
+    # loader itself, and using two loaders is how this stops working subtly.
+    for package in $(find "$workdir" -name 'intel-*.deb'); do \
+      echo "unpacking $package"; \
+      mkdir -p "$workdir/x"; cd "$workdir/x"; \
+      ar x "$package"; \
+      tar xf data.tar.* -C /; \
+      cd "$workdir"; rm -rf "$workdir/x"; \
+    done; \
+    ldconfig; \
+    cd /; rm -rf "$workdir"
+
+# Intel's .deb installs into Debian's multiarch directory, which Fedora does
+# not search. Rather than move the files, tell the loader where they are.
+RUN echo /usr/lib/x86_64-linux-gnu > /etc/ld.so.conf.d/intel-npu.conf && ldconfig
+
+COPY pyproject.toml README.md LICENSE /app/
+COPY src /app/src
+COPY scripts/download-models.py /app/scripts/download-models.py
+RUN pip install --no-cache-dir /app
+
+RUN mkdir -p /models
+VOLUME /models
+
+ENTRYPOINT []
+CMD ["intel-npu-mcp"]
