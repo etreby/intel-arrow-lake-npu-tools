@@ -34,12 +34,11 @@ FROM fedora:41
 
 ARG NPU_DRIVER_TAG=v1.35.0
 
-# The driver's own build dependencies. It vendors much of what it needs as git
-# submodules, which is why the clone is recursive and slow.
+# The driver's own build dependencies.
 # git-lfs is not optional and its absence is not obvious: building the NPU
-# compiler makes CMake clone OpenVINO's own source tree, which stores files in
-# LFS, and without it the clone fails with "the remote end hung up
-# unexpectedly" several hundred build steps in.
+# compiler makes CMake clone OpenVINO's own source tree during the build, and
+# that tree stores files in LFS. Without it the clone dies with "the remote end
+# hung up unexpectedly" several hundred build steps in.
 RUN dnf install -y --setopt=install_weak_deps=False \
       git git-lfs cmake ninja-build gcc gcc-c++ make \
       oneapi-level-zero oneapi-level-zero-devel \
@@ -66,64 +65,31 @@ RUN set -eux; \
     g++ --version | head -1; \
     command -v g++
 
-# The superproject and its submodules are fetched separately, and this is the
-# difference between finishing and not on an unreliable connection. A single
-# --recurse-submodules clone is all-or-nothing: one dropped connection twenty
-# submodules in, and the retry deletes everything that succeeded and starts
-# again, which on a link that drops every few minutes never converges. Fetching
-# the submodules in their own loop resumes instead — update --init skips the
-# ones already present, so every attempt keeps its ground.
+# The source is fetched outside this build, by scripts/fetch-npu-driver-source.sh,
+# and bind-mounted in. That is not a stylistic preference: a container build
+# discards everything it has when a step fails, so on a connection that drops
+# half its requests each attempt begins from nothing and the download never
+# finishes — measured here across six attempts, none of which got the whole
+# tree. A directory on the host keeps what it has won and can be resumed until
+# it is complete, which took several passes.
 #
-# Retried at all because the build behind this is an hour long, the submodules
-# include LLVM and OpenVINO, and losing that to one SSL timeout is a poor trade
-# for a few lines.
+# Copied rather than built in place, so the cache stays exactly as fetched.
+#
+#   ./scripts/fetch-npu-driver-source.sh
+#   podman build -t intel-npu-driver:fedora \
+#     -v ~/.cache/intel-npu-driver-src:/src/npu-driver-cache:ro \
+#     -f packaging/docker/Dockerfile.fedora-driver .
 RUN set -eux; \
-    # Multiplexing several fetches over one HTTP/2 connection is efficient
-    # until that connection is unreliable, at which point one drop takes all of
-    # them with it. Forcing HTTP/1.1 is the long-standing workaround, and the
-    # low-speed limit turns a transfer that has silently stalled into a prompt
-    # failure the retry below can act on, rather than a hang.
-    git config --global http.version HTTP/1.1; \
-    git config --global http.postBuffer 524288000; \
-    git config --global http.lowSpeedLimit 1000; \
-    git config --global http.lowSpeedTime 60; \
-    for attempt in 1 2 3 4 5 6 7 8; do \
-      if git clone --depth 1 --branch "${NPU_DRIVER_TAG}" \
-           https://github.com/intel/linux-npu-driver.git /src/npu-driver; then \
-        break; \
-      fi; \
-      echo "clone attempt $attempt failed; retrying"; \
-      rm -rf /src/npu-driver; \
-      test "$attempt" -lt 8 || { echo "could not clone the driver source" >&2; exit 1; }; \
-      sleep $((attempt * 20)); \
-    done; \
-    cd /src/npu-driver; \
-    # The exit status of `submodule update` is not to be trusted here: it has
-    # returned success with third_party/npu_compiler_elf still empty, and the
-    # build then failed much later complaining that a source directory had no
-    # CMakeLists.txt. What is checked instead is the state git reports —
-    # status prefixes an uninitialised submodule with a minus — so this
-    # repeats until every one of them is genuinely populated.
-    # What is checked is whether each submodule directory has anything in it,
-    # not what git says about it. Both weaker signals have already lied here:
-    # `submodule update` exits 0 having fetched nothing, and `submodule status`
-    # then reports a submodule as present while its directory is empty, because
-    # it was registered and its checkout failed. CMake is the one that finally
-    # notices, hundreds of lines later, complaining that a source directory has
-    # no CMakeLists.txt — which points nowhere near the cause.
-    for attempt in 1 2 3 4 5 6 7 8 9 10; do \
-      git submodule update --init --recursive --depth 1 --force || true; \
-      incomplete=$(git submodule status --recursive | awk '{print $2}' | \
-        while read -r path; do \
-          test -n "$(ls -A "$path" 2>/dev/null)" || echo "$path"; \
-        done); \
-      if [ -z "$incomplete" ]; then break; fi; \
-      echo "empty submodules after attempt $attempt; resuming:"; \
-      printf '  %s\n' $incomplete; \
-      test "$attempt" -lt 10 || { echo "could not fetch every submodule" >&2; exit 1; }; \
-      sleep $((attempt * 20)); \
-    done; \
-    cd /; \
+    test -d /src/npu-driver-cache || { \
+      echo "Mount the driver source at /src/npu-driver-cache." >&2; \
+      echo "Run scripts/fetch-npu-driver-source.sh first; it prints the command." >&2; \
+      exit 1; \
+    }; \
+    mkdir -p /src; \
+    cp -a /src/npu-driver-cache /src/npu-driver; \
+    test -f /src/npu-driver/third_party/npu_compiler_elf/CMakeLists.txt || { \
+      echo "The mounted source is incomplete; re-run the fetch script." >&2; exit 1; \
+    }; \
     cmake -S /src/npu-driver -B /src/build -G Ninja \
       -DCMAKE_BUILD_TYPE=Release \
       -DCMAKE_INSTALL_PREFIX=/usr \
