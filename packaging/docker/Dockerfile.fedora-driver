@@ -89,10 +89,18 @@ RUN set -eux; \
       sleep $((attempt * 20)); \
     done; \
     cd /src/npu-driver; \
+    # The exit status of `submodule update` is not to be trusted here: it has
+    # returned success with third_party/npu_compiler_elf still empty, and the
+    # build then failed much later complaining that a source directory had no
+    # CMakeLists.txt. What is checked instead is the state git reports —
+    # status prefixes an uninitialised submodule with a minus — so this
+    # repeats until every one of them is genuinely populated.
     for attempt in 1 2 3 4 5 6 7 8 9 10; do \
-      if git submodule update --init --recursive --depth 1; then break; fi; \
-      echo "submodule attempt $attempt incomplete; resuming"; \
-      test "$attempt" -lt 10 || { echo "could not fetch the submodules" >&2; exit 1; }; \
+      git submodule update --init --recursive --depth 1 || true; \
+      if ! git submodule status --recursive | grep -q '^-'; then break; fi; \
+      echo "submodules still incomplete after attempt $attempt; resuming"; \
+      git submodule status --recursive | grep '^-' | sed 's/^/  missing: /'; \
+      test "$attempt" -lt 10 || { echo "could not fetch every submodule" >&2; exit 1; }; \
       sleep $((attempt * 20)); \
     done; \
     cd /; \
