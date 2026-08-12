@@ -104,11 +104,22 @@ RUN set -eux; \
     # CMakeLists.txt. What is checked instead is the state git reports —
     # status prefixes an uninitialised submodule with a minus — so this
     # repeats until every one of them is genuinely populated.
+    # What is checked is whether each submodule directory has anything in it,
+    # not what git says about it. Both weaker signals have already lied here:
+    # `submodule update` exits 0 having fetched nothing, and `submodule status`
+    # then reports a submodule as present while its directory is empty, because
+    # it was registered and its checkout failed. CMake is the one that finally
+    # notices, hundreds of lines later, complaining that a source directory has
+    # no CMakeLists.txt — which points nowhere near the cause.
     for attempt in 1 2 3 4 5 6 7 8 9 10; do \
-      git submodule update --init --recursive --depth 1 || true; \
-      if ! git submodule status --recursive | grep -q '^-'; then break; fi; \
-      echo "submodules still incomplete after attempt $attempt; resuming"; \
-      git submodule status --recursive | grep '^-' | sed 's/^/  missing: /'; \
+      git submodule update --init --recursive --depth 1 --force || true; \
+      incomplete=$(git submodule status --recursive | awk '{print $2}' | \
+        while read -r path; do \
+          test -n "$(ls -A "$path" 2>/dev/null)" || echo "$path"; \
+        done); \
+      if [ -z "$incomplete" ]; then break; fi; \
+      echo "empty submodules after attempt $attempt; resuming:"; \
+      printf '  %s\n' $incomplete; \
       test "$attempt" -lt 10 || { echo "could not fetch every submodule" >&2; exit 1; }; \
       sleep $((attempt * 20)); \
     done; \
