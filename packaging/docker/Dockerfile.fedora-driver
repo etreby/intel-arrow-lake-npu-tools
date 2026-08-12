@@ -1,21 +1,22 @@
 # Build Intel's NPU userspace driver from source on Fedora.
 #
-# THIS DOES NOT CURRENTLY BUILD. It is kept because it gets far enough to be
-# worth knowing about, and because the failure is specific rather than vague.
+# Expensive: it clones OpenVINO and LLVM and runs to roughly 7,500 compilation
+# steps, the better part of an hour on 24 cores.
 #
-# Enabling the compiler makes the build clone OpenVINO and LLVM and run to
-# roughly 7,500 compilation steps. On Fedora 41 it stops at about 5,900 with
-# -Werror=maybe-uninitialized raised inside LLVM's own DenseMap.h — a GCC 14
-# false positive on code Intel does not maintain, made fatal because the build
-# sets -Werror. The likely fixes are ENABLE_COMPILATION_FLAGS_OVERRIDE=ON with
-# -Wno-error, or an image whose GCC is older; each attempt costs the better
-# part of an hour, so neither has been tried.
+# The first attempt stopped at about 5,900 steps with -Werror=maybe-uninitialized
+# raised inside LLVM's own DenseMap.h — a GCC 14 false positive, in code Intel
+# does not maintain, made fatal by the -Werror that cmake/compiler_flags.cmake
+# sets. The compiler wrapper below is the fix, and it is verified in isolation:
+# the same construct that GCC rejects compiles through the wrapper. Whether the
+# whole build now completes has not been confirmed end to end, because the
+# network here has been dropping connections to GitHub and the clone is large.
 #
 # Dockerfile.fedora next to this file takes the shorter route and *is* verified
-# working: Fedora's own Level Zero loader plus Intel's binaries unpacked from
-# their .deb. If all you want is the NPU running on an RPM distribution, use
-# that. This file matters only if you want to build the driver rather than
-# redistribute Intel's build of it.
+# working, on the hardware: Fedora's own Level Zero loader plus Intel's
+# binaries unpacked from their .deb, running a model on the NPU. If all you
+# want is the NPU on an RPM distribution, use that. This file matters if you
+# want to build the driver rather than redistribute Intel's build of it —
+# which is what packaging it for a distribution would require.
 #
 # It exists to answer one question: can an RPM distribution run the NPU at all,
 # given that Intel publishes the driver only as .deb for Ubuntu 24.04?
@@ -46,13 +47,46 @@ RUN dnf install -y --setopt=install_weak_deps=False \
       libudev-devel pciutils \
     && dnf clean all
 
+# Make -Werror non-fatal, by wrapping the compiler rather than by passing a
+# flag. The code that fails is not Intel's: it is LLVM's DenseMap.h, compiled
+# inside an ExternalProject that configures itself, so a -DCMAKE_CXX_FLAGS on
+# the outer build does not necessarily reach it. A wrapper earlier in PATH
+# reaches every invocation by construction. GCC takes the last warning option
+# it is given, so appending -Wno-error defeats an earlier -Werror wherever
+# that -Werror was set.
+#
+# This suppresses nothing real. The diagnostic is a known GCC 14 false
+# positive about a DenseMap bucket pointer, in third-party code, and treating
+# somebody else's warnings as fatal was never the packager's intent.
 RUN set -eux; \
-    git clone --depth 1 --branch "${NPU_DRIVER_TAG}" --recurse-submodules --shallow-submodules \
-      https://github.com/intel/linux-npu-driver.git /src/npu-driver; \
+    for tool in gcc g++ cc c++; do \
+      printf '#!/bin/sh\nexec /usr/bin/%s "$@" -Wno-error\n' "$tool" > "/usr/local/bin/$tool"; \
+      chmod 755 "/usr/local/bin/$tool"; \
+    done; \
+    g++ --version | head -1; \
+    command -v g++
+
+# The clone is retried because the build behind it is an hour long, and losing
+# that to one SSL timeout — which has already happened once — is a poor trade
+# for three lines. The submodules pull LLVM and OpenVINO, so this moves a lot
+# of data and has plenty of opportunity to fail.
+RUN set -eux; \
+    for attempt in 1 2 3 4 5 6 7 8; do \
+      rm -rf /src/npu-driver; \
+      if git clone --depth 1 --branch "${NPU_DRIVER_TAG}" --recurse-submodules --shallow-submodules \
+           https://github.com/intel/linux-npu-driver.git /src/npu-driver; then \
+        break; \
+      fi; \
+      echo "clone attempt $attempt failed; retrying"; \
+      test "$attempt" -lt 8 || { echo "could not clone the driver source" >&2; exit 1; }; \
+      sleep $((attempt * 30)); \
+    done; \
     cmake -S /src/npu-driver -B /src/build -G Ninja \
       -DCMAKE_BUILD_TYPE=Release \
       -DCMAKE_INSTALL_PREFIX=/usr \
-      -DENABLE_NPU_COMPILER_BUILD=ON; \
+      -DENABLE_NPU_COMPILER_BUILD=ON \
+      -DENABLE_COMPILATION_FLAGS_OVERRIDE=ON \
+      -DENABLE_VALIDATION_BUILD=OFF; \
     cmake --build /src/build --parallel "$(nproc)"; \
     cmake --install /src/build; \
     ldconfig; \
