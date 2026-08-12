@@ -78,6 +78,15 @@ RUN set -eux; \
 # include LLVM and OpenVINO, and losing that to one SSL timeout is a poor trade
 # for a few lines.
 RUN set -eux; \
+    # Multiplexing several fetches over one HTTP/2 connection is efficient
+    # until that connection is unreliable, at which point one drop takes all of
+    # them with it. Forcing HTTP/1.1 is the long-standing workaround, and the
+    # low-speed limit turns a transfer that has silently stalled into a prompt
+    # failure the retry below can act on, rather than a hang.
+    git config --global http.version HTTP/1.1; \
+    git config --global http.postBuffer 524288000; \
+    git config --global http.lowSpeedLimit 1000; \
+    git config --global http.lowSpeedTime 60; \
     for attempt in 1 2 3 4 5 6 7 8; do \
       if git clone --depth 1 --branch "${NPU_DRIVER_TAG}" \
            https://github.com/intel/linux-npu-driver.git /src/npu-driver; then \
