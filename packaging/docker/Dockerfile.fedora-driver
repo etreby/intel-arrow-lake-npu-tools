@@ -66,21 +66,36 @@ RUN set -eux; \
     g++ --version | head -1; \
     command -v g++
 
-# The clone is retried because the build behind it is an hour long, and losing
-# that to one SSL timeout — which has already happened once — is a poor trade
-# for three lines. The submodules pull LLVM and OpenVINO, so this moves a lot
-# of data and has plenty of opportunity to fail.
+# The superproject and its submodules are fetched separately, and this is the
+# difference between finishing and not on an unreliable connection. A single
+# --recurse-submodules clone is all-or-nothing: one dropped connection twenty
+# submodules in, and the retry deletes everything that succeeded and starts
+# again, which on a link that drops every few minutes never converges. Fetching
+# the submodules in their own loop resumes instead — update --init skips the
+# ones already present, so every attempt keeps its ground.
+#
+# Retried at all because the build behind this is an hour long, the submodules
+# include LLVM and OpenVINO, and losing that to one SSL timeout is a poor trade
+# for a few lines.
 RUN set -eux; \
     for attempt in 1 2 3 4 5 6 7 8; do \
-      rm -rf /src/npu-driver; \
-      if git clone --depth 1 --branch "${NPU_DRIVER_TAG}" --recurse-submodules --shallow-submodules \
+      if git clone --depth 1 --branch "${NPU_DRIVER_TAG}" \
            https://github.com/intel/linux-npu-driver.git /src/npu-driver; then \
         break; \
       fi; \
       echo "clone attempt $attempt failed; retrying"; \
+      rm -rf /src/npu-driver; \
       test "$attempt" -lt 8 || { echo "could not clone the driver source" >&2; exit 1; }; \
-      sleep $((attempt * 30)); \
+      sleep $((attempt * 20)); \
     done; \
+    cd /src/npu-driver; \
+    for attempt in 1 2 3 4 5 6 7 8 9 10; do \
+      if git submodule update --init --recursive --depth 1; then break; fi; \
+      echo "submodule attempt $attempt incomplete; resuming"; \
+      test "$attempt" -lt 10 || { echo "could not fetch the submodules" >&2; exit 1; }; \
+      sleep $((attempt * 20)); \
+    done; \
+    cd /; \
     cmake -S /src/npu-driver -B /src/build -G Ninja \
       -DCMAKE_BUILD_TYPE=Release \
       -DCMAKE_INSTALL_PREFIX=/usr \
