@@ -80,6 +80,17 @@ RUN set -eux; \
 #     -v ~/.cache/intel-npu-driver-src:/src/npu-driver-cache:ro \
 #     -f packaging/docker/Dockerfile.fedora-driver .
 RUN set -eux; \
+    # Restored deliberately: these were lost when the clone loop was replaced
+    # by the mounted cache, and without them a stalled transfer simply hangs.
+    # The build then sits with several git processes making no progress and no
+    # failure for the retry loop to act on — which is exactly what happened.
+    # lowSpeedTime turns a transfer that has gone quiet into a prompt error,
+    # and HTTP/1.1 stops one dropped connection taking every multiplexed fetch
+    # with it. The nested clones below are all subject to both.
+    git config --global http.version HTTP/1.1; \
+    git config --global http.postBuffer 524288000; \
+    git config --global http.lowSpeedLimit 1000; \
+    git config --global http.lowSpeedTime 60; \
     test -d /src/npu-driver-cache || { \
       echo "Mount the driver source at /src/npu-driver-cache." >&2; \
       echo "Run scripts/fetch-npu-driver-source.sh first; it prints the command." >&2; \
