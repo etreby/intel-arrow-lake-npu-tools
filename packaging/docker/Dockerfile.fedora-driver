@@ -96,18 +96,22 @@ RUN set -eux; \
       -DENABLE_NPU_COMPILER_BUILD=ON \
       -DENABLE_COMPILATION_FLAGS_OVERRIDE=ON \
       -DENABLE_VALIDATION_BUILD=OFF; \
-    # The build itself is retried, not only the clone above, because most of
-    # the downloading happens in here: the compiler is an ExternalProject that
-    # clones OpenVINO and a fork of LLVM during the build, and CMake gives each
-    # of those exactly two attempts before aborting the lot. Ninja does not
-    # stamp a step it failed, so re-running resumes rather than restarting, and
-    # a nested clone lost to a dropped connection costs minutes instead of the
-    # whole hour.
-    for attempt in 1 2 3 4 5 6; do \
+    # Retried generously, because the compiler is an ExternalProject that
+    # clones OpenVINO, OpenCV, ONNX Runtime, oneTBB and a fork of LLVM as build
+    # steps — several gigabytes — and CMake gives each exactly two attempts
+    # before aborting everything. Those are the steps that fail on an
+    # unreliable connection, and unlike the source tree they cannot be
+    # pre-fetched without knowing more about ExternalProject than is wise.
+    #
+    # Retrying is worth doing because ninja stamps what it finished: every
+    # compiled object survives, and a retry re-runs only the download that
+    # failed. Progress therefore accumulates across attempts even though each
+    # individual clone starts over.
+    for attempt in $(seq 1 20); do \
       if cmake --build /src/build --parallel "$(nproc)"; then break; fi; \
       echo "build attempt $attempt failed; resuming"; \
-      test "$attempt" -lt 6 || { echo "the driver build did not complete" >&2; exit 1; }; \
-      sleep $((attempt * 30)); \
+      test "$attempt" -lt 20 || { echo "the driver build did not complete" >&2; exit 1; }; \
+      sleep 30; \
     done; \
     cmake --install /src/build; \
     ldconfig; \
